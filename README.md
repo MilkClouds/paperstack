@@ -6,7 +6,7 @@ under its maintainer's control.
 
 It can search typed reviews, initialize and validate entries, inspect external paper metadata, read arXiv sources,
 manage a selected-venue DBLP index, and build a static viewer. A synthetic corpus lives in
-[`examples/corpus`](examples/corpus/README.md); no assessment of real work is bundled with the package.
+[`examples/corpus`](examples/corpus/); no assessment of real work is bundled with the package.
 
 ## Install
 
@@ -20,19 +20,25 @@ PDF conversion is optional:
 uv tool install 'paperstack-cli[pdf]'
 ```
 
+The base install stays small and supports every command except PDF-to-Markdown conversion. `paperstack-cli[full]`
+is a convenience alias that currently includes the same PDF support.
+
 ## Choose a corpus
 
 Register either a local working tree or a GitHub repository. The first registered corpus becomes active.
 
 ```bash
 paperstack corpus add work --path ~/research/reviews
+paperstack corpus init new --path ~/research/new-corpus
 paperstack corpus add private --repo OWNER/private-reviews
 paperstack corpus list
 paperstack corpus use private
 paperstack corpus remove work
+paperstack corpus remove private --purge-cache --yes
 ```
 
-Private GitHub repositories use the existing `gh` login without storing its token:
+Private GitHub repositories use the existing `gh` login without storing its token. The cache contains only typed
+entry files, uses private filesystem permissions, and can be explicitly purged:
 
 ```bash
 gh auth login

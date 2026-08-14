@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
-import subprocess
+import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from pathlib import Path
 from urllib.parse import quote_plus
 
 import polars as pl
+from filelock import FileLock
 
 SNAPSHOT = "2026.08.13"
 RELEASE_REPO = "MilkClouds/paperstack"
@@ -187,8 +187,7 @@ def _row(normalized: str, bibtex: str) -> tuple:
 def _lock():
     root = data_dir()
     root.mkdir(parents=True, exist_ok=True)
-    with (root / "install.lock").open("w") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
+    with FileLock(root / "install.lock"):
         yield
 
 
@@ -207,23 +206,27 @@ def _release_version(tag: str) -> tuple[int, int, int] | None:
 
 
 def _github_json(endpoint: str) -> object:
+    request = urllib.request.Request(
+        f"https://api.github.com/{endpoint}",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "paperstack (+https://github.com/MilkClouds/paperstack)",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
     try:
-        result = subprocess.run(
-            ["gh", "api", endpoint],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError("DBLP index access requires gh; install it and run `gh auth login`") from exc
-    except subprocess.TimeoutExpired as exc:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = response.read(10 * 1024 * 1024 + 1)
+    except TimeoutError as exc:
         raise RuntimeError("GitHub Release lookup timed out") from exc
-    if result.returncode != 0:
-        detail = result.stderr.strip() or "gh api failed"
-        raise RuntimeError(f"cannot read paperstack Releases through gh ({detail})")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"GitHub Release lookup failed with HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"GitHub Release lookup failed ({exc.reason})") from exc
+    if len(payload) > 10 * 1024 * 1024:
+        raise RuntimeError("GitHub Release response is unexpectedly large")
     try:
-        return json.loads(result.stdout)
+        return json.loads(payload)
     except json.JSONDecodeError as exc:
         raise RuntimeError("GitHub Release response is not valid JSON") from exc
 
@@ -250,7 +253,7 @@ def latest_snapshot() -> Snapshot:
             continue
         asset = next((item for item in release.get("assets", []) if item.get("name") == ASSET_NAME), None)
         digest = str((asset or {}).get("digest", ""))
-        if asset is None or not digest.startswith("sha256:"):
+        if asset is None or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
             continue
         candidates.append(
             (
@@ -315,6 +318,8 @@ def _version(version: object) -> tuple[int, int, int] | None:
 
 
 def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
     descriptor = os.open(path, os.O_RDONLY)
     try:
         os.fsync(descriptor)
@@ -357,43 +362,22 @@ def _private_asset_id(snapshot: Snapshot) -> int:
 
 
 def _download(snapshot: Snapshot, staged: Path) -> str:
-    asset_id = snapshot.asset_id
-    if asset_id is None and snapshot.url.startswith(f"https://github.com/{RELEASE_REPO}/releases/download/"):
-        asset_id = _private_asset_id(snapshot)
-    if asset_id is not None:
-        try:
-            with staged.open("wb") as handle:
-                result = subprocess.run(
-                    [
-                        "gh",
-                        "api",
-                        f"repos/{RELEASE_REPO}/releases/assets/{asset_id}",
-                        "-H",
-                        "Accept: application/octet-stream",
-                    ],
-                    stdout=handle,
-                    stderr=subprocess.PIPE,
-                    text=False,
-                    timeout=180,
-                    check=False,
-                )
-        except FileNotFoundError as exc:
-            raise RuntimeError("DBLP index access requires gh; install it and run `gh auth login`") from exc
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError("DBLP snapshot download timed out") from exc
-        if result.returncode != 0:
-            detail = result.stderr.decode(errors="replace").strip() or "gh api failed"
-            raise RuntimeError(f"cannot download the DBLP snapshot through gh ({detail})")
-        return _sha256(staged)
     digest = hashlib.sha256()
     request = urllib.request.Request(
         snapshot.url,
         headers={"User-Agent": "paperstack (+https://github.com/MilkClouds/paperstack)"},
     )
-    with urllib.request.urlopen(request, timeout=120) as response, staged.open("wb") as handle:
-        while chunk := response.read(1 << 20):
-            handle.write(chunk)
-            digest.update(chunk)
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response, staged.open("wb") as handle:
+            while chunk := response.read(1 << 20):
+                handle.write(chunk)
+                digest.update(chunk)
+    except TimeoutError as exc:
+        raise RuntimeError("DBLP snapshot download timed out") from exc
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"DBLP snapshot download failed with HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"DBLP snapshot download failed ({exc.reason})") from exc
     return digest.hexdigest()
 
 

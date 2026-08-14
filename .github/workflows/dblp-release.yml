@@ -1,0 +1,64 @@
+name: DBLP snapshot release
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: Snapshot version in YYYY.MM.DD form
+        required: true
+        type: string
+      base_tag:
+        description: Previous dblp-index tag (optional)
+        required: false
+        type: string
+      years:
+        description: Space-separated years to refresh
+        required: true
+        default: "2025 2026"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: dblp-release
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+      - name: Validate inputs
+        shell: bash
+        run: |
+          [[ "${{ inputs.snapshot }}" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]]
+          ! gh release view "dblp-index-${{ inputs.snapshot }}" >/dev/null 2>&1
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Download base
+        if: inputs.base_tag != ''
+        run: gh release download '${{ inputs.base_tag }}' --pattern dblp.parquet --dir previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Build and validate snapshot
+        shell: bash
+        env:
+          REFRESH_YEARS: ${{ inputs.years }}
+        run: |
+          args=()
+          for year in $REFRESH_YEARS; do
+            [[ "$year" =~ ^[0-9]{4}$ ]]
+            args+=(--year "$year")
+          done
+          if test -f previous/dblp.parquet; then args+=(--base previous/dblp.parquet); fi
+          uv run paperstack index dblp build dblp.parquet --snapshot '${{ inputs.snapshot }}' "${args[@]}"
+          uv run paperstack index dblp install-file dblp.parquet
+          uv run paperstack index dblp status --json
+          sha256sum dblp.parquet > SHA256SUMS
+      - name: Publish immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create 'dblp-index-${{ inputs.snapshot }}' dblp.parquet SHA256SUMS
+          --title 'DBLP index — ${{ inputs.snapshot }}'
+          --notes 'Selected-venue DBLP snapshot built and validated by Paperstack.'

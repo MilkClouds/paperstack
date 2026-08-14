@@ -15,20 +15,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11.4", "3.14"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v9.0.0
-      - run: make all
-      - run: uv build
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
 
-      - name: Check the installed wheel and synthetic corpus
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+      - run: uv build
+      - name: Check base and full wheel installs
+        shell: bash
         run: |
-          uv tool install dist/*.whl
+          wheel=$(printf '%s\n' dist/*.whl)
+          uv tool install "$wheel"
           paperstack --help > /dev/null
           XDG_CONFIG_HOME="$RUNNER_TEMP/config" paperstack corpus add example --path examples/corpus
-          XDG_CONFIG_HOME="$RUNNER_TEMP/config" paperstack review show example2026paperstack --brief
           XDG_CONFIG_HOME="$RUNNER_TEMP/config" paperstack viewer build --output "$RUNNER_TEMP/site"
           test -f "$RUNNER_TEMP/site/assets/marked.min.js"
+          test -f "$RUNNER_TEMP/site/assets/marked.LICENSE"
+          uv venv "$RUNNER_TEMP/full"
+          uv pip install --python "$RUNNER_TEMP/full/bin/python" "$wheel[full]"
+          "$RUNNER_TEMP/full/bin/python" -c 'import pymupdf4llm'

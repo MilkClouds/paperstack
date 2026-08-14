@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -26,8 +28,8 @@ def _collections(root: Path, keys: set[str]) -> dict:
     if not isinstance(document, dict) or document.get("version") != 1:
         raise ValueError(f"invalid collections document: {path}")
     collections = document.get("collections")
-    if not isinstance(collections, list) or not collections:
-        raise ValueError(f"collections must be a nonempty array: {path}")
+    if not isinstance(collections, list):
+        raise TypeError(f"collections must be an array: {path}")
     seen: set[str] = set()
     published = False
     for collection in collections:
@@ -51,7 +53,7 @@ def _collections(root: Path, keys: set[str]) -> dict:
             raise ValueError(f"collection {identifier!r} references missing entries: {', '.join(missing)}")
         seen.add(identifier)
         published = published or status == "published"
-    if not published:
+    if collections and not published:
         raise ValueError("at least one collection must be published")
     return document
 
@@ -78,8 +80,6 @@ def build(root: Path, output: Path) -> int:
     from .cli import load
 
     entries = load(root)
-    if not entries:
-        raise ValueError(f"no typed entries under {root}")
     keys = {entry["key"] for entry in entries}
     collections = _collections(root, keys)
     citations = _citations(root)
@@ -93,12 +93,41 @@ def build(root: Path, output: Path) -> int:
         or entry_root in destination.parents
     ):
         raise ValueError("viewer output would replace a broad path, the corpus, or authored entries")
+    backup = destination.parent / f".{destination.name}.backup"
+    if backup.exists() and not destination.exists():
+        os.replace(backup, destination)
+    if destination.exists() and not destination.is_dir():
+        raise ValueError(f"viewer output is not a directory: {destination}")
     if destination.exists() and any(destination.iterdir()):
-        generated = (destination / "data.json").is_file() and (destination / "index.html").is_file()
-        if not generated:
+        marker = destination / ".paperstack-viewer"
+        if not marker.is_file() or marker.read_text(encoding="utf-8") != "1\n":
             raise ValueError(f"viewer output is a nonempty directory not created by Paperstack: {destination}")
-    shutil.rmtree(destination, ignore_errors=True)
-    (destination / "assets").mkdir(parents=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staged = Path(tempfile.mkdtemp(dir=destination.parent, prefix=f".{destination.name}.tmp-"))
+    published = False
+    try:
+        _write_site(root, staged, entries, collections, citations)
+        shutil.rmtree(backup, ignore_errors=True)
+        if destination.exists():
+            os.replace(destination, backup)
+        try:
+            os.replace(staged, destination)
+            published = True
+        except OSError:
+            if backup.exists() and not destination.exists():
+                os.replace(backup, destination)
+            raise
+        shutil.rmtree(backup, ignore_errors=True)
+    finally:
+        if not published:
+            shutil.rmtree(staged, ignore_errors=True)
+        if backup.exists() and destination.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+    return len(entries)
+
+
+def _write_site(root: Path, destination: Path, entries: list[dict], collections: dict, citations: dict) -> None:
+    (destination / "assets").mkdir(parents=True, exist_ok=True)
     for directory in entry_types.ENTRY_TYPES.values():
         (destination / "entries" / directory.directory).mkdir(parents=True)
     for entry in entries:
@@ -122,8 +151,9 @@ def build(root: Path, output: Path) -> int:
         shutil.copy2(site / name, destination / "assets" / name)
     shutil.copy2(site / "favicon.svg", destination / "favicon.svg")
     shutil.copy2(vendor / "marked.min.js", destination / "assets" / "marked.min.js")
+    if (vendor / "marked.LICENSE").is_file():
+        shutil.copy2(vendor / "marked.LICENSE", destination / "assets" / "marked.LICENSE")
     (destination / ".paperstack-viewer").write_text("1\n", encoding="utf-8")
-    return len(entries)
 
 
 class Handler(SimpleHTTPRequestHandler):

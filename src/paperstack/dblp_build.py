@@ -87,7 +87,9 @@ def fetch_venue_year(
         entries = _fetch_query(f"venue:{search_venue}: year:{year}:", base_url=base_url, get=get, delay=delay)
     if not entries:
         for suffix in definition.get("suffixes", []):
-            if suffix and (entries := _fetch_query(toc_query(venue, year, suffix), base_url=base_url, get=get)):
+            if suffix and (
+                entries := _fetch_query(toc_query(venue, year, suffix), base_url=base_url, get=get, delay=delay)
+            ):
                 break
     if not entries and definition.get("type") != "journals":
         for part in range(1, 50):

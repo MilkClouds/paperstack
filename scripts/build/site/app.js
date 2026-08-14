@@ -6,9 +6,11 @@
   const kindLabel = entry => ({paper: 'paper', talk: 'talk', post: 'post'}[kindOf(entry)] || kindOf(entry));
   const kindPlural = kind => ({paper: 'Papers', talk: 'Talks', post: 'Posts'}[kind] || kind);
   const kindCountLabel = (kind, count) => count === 1 ? kind : kindPlural(kind).toLowerCase();
-  const safeHref = href => {
+  const safeHref = (href, {image = false} = {}) => {
     const value = String(href || '');
-    return /^(?:https?:\/\/|mailto:)/i.test(value) || /^(?:\.\.?\/)?[a-z0-9_./-]+(?:#[a-z0-9_.:-]+)?$/i.test(value) || /^#[a-z0-9_.:-]+$/i.test(value) ? value : '#';
+    if (/^\/\//.test(value)) return '#';
+    const remote = image ? /^https?:\/\//i.test(value) : /^(?:https?:\/\/|mailto:)/i.test(value);
+    return remote || /^(?:\.\.?\/)?[a-z0-9_./-]+(?:#[a-z0-9_.:-]+)?$/i.test(value) || /^#[a-z0-9_.:-]+$/i.test(value) ? value : '#';
   };
   const readJson = async path => {
     const response = await fetch(path);
@@ -31,7 +33,7 @@
         return `<a href="${attr(target)}"${title ? ` title="${attr(title)}"` : ''}>${this.parser.parseInline(tokens)}</a>`;
       },
       image({href, title, text}) {
-        const target = safeHref(href);
+        const target = safeHref(href, {image: true});
         return target === '#' ? esc(text) : `<img src="${attr(target)}" alt="${attr(text)}"${title ? ` title="${attr(title)}"` : ''}>`;
       },
       html({text}) { return esc(text); },

@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from paperstack import cli, corpora, entry_types
+from paperstack import cli, corpora, entry_types, remote_corpus
 
 
 def _corpus(path):
@@ -82,3 +82,27 @@ def test_cli_first_profile_is_active_and_use_switches_it(tmp_path, monkeypatch, 
     assert _run(monkeypatch, "corpus", "use", "second") == 0
     assert corpora.active().name == "second"
     assert "second" in capsys.readouterr().out
+
+
+def test_cli_init_bootstraps_an_empty_corpus(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    root = tmp_path / "empty"
+    assert _run(monkeypatch, "corpus", "init", "work", "--path", str(root)) == 0
+    assert corpora.active().location == str(root)
+    assert json.loads((root / "entries" / "collections.json").read_text())["collections"] == []
+
+
+def test_remove_can_purge_only_a_confirmed_repo_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    corpora.add("private", kind="repo", location="example/papers")
+    cache = remote_corpus.RemoteCache("example/papers")
+    cache.root.mkdir(parents=True)
+    (cache.root / "secret").write_text("cached")
+    assert _run(monkeypatch, "corpus", "remove", "private", "--purge-cache", "--yes") == 0
+    assert not cache.root.exists()
+
+
+def test_remote_cache_keys_do_not_collide(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    assert remote_corpus.RemoteCache("a_b/c").root != remote_corpus.RemoteCache("a/b_c").root

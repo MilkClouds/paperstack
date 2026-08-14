@@ -3,5 +3,3 @@ _site/
 .claude/
 __pycache__/
 .env
-# uv tool resolves fresh; uv run uses the PEP-723 metadata.
-uv.lock
