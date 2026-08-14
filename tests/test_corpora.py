@@ -50,6 +50,8 @@ def test_registry_rejects_bad_names_repositories_and_config(tmp_path, monkeypatc
         corpora.add("Not Good", kind="repo", location="example/papers")
     with pytest.raises(corpora.ConfigError, match="OWNER/REPO"):
         corpora.add("bad", kind="repo", location="not-a-repository")
+    with pytest.raises(corpora.ConfigError, match="OWNER/REPO"):
+        corpora.add("unsafe", kind="repo", location="../papers")
 
     corpora.config_path().parent.mkdir(parents=True)
     corpora.config_path().write_text("not json")
@@ -109,7 +111,8 @@ def test_remove_can_purge_a_repo_cache(tmp_path, monkeypatch):
 
 def test_remote_cache_keys_do_not_collide(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    assert cli.RemoteCache("a_b/c").root != cli.RemoteCache("a/b_c").root
+    assert cli.RemoteCache("a_b/c").root == tmp_path / "paperstack" / "repos" / "a_b" / "c"
+    assert cli.RemoteCache("a/b_c").root == tmp_path / "paperstack" / "repos" / "a" / "b_c"
 
 
 def test_failed_cache_publish_restores_the_previous_copy(tmp_path, monkeypatch):
@@ -135,9 +138,9 @@ def test_remote_cache_keeps_entries_only(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     source = _corpus(tmp_path / "source")
     (source / "secret.txt").write_text("private")
-    legacy = cli.RemoteCache("example/private").legacy_root
-    legacy.mkdir(parents=True)
-    (legacy / "secret.txt").write_text("old private cache")
+    old_cache = cli.RemoteCache("example/private")._old_cache_root
+    old_cache.mkdir(parents=True)
+    (old_cache / "secret.txt").write_text("old private cache")
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode="w:gz") as bundle:
         bundle.add(source, arcname="repo")
@@ -148,5 +151,5 @@ def test_remote_cache_keeps_entries_only(tmp_path, monkeypatch):
     cached = cli.RemoteCache("example/private").corpus
     assert (cached / "entries" / "papers" / "example2026paper.md").is_file()
     assert not (cached / "secret.txt").exists()
-    assert not legacy.exists()
+    assert not old_cache.exists()
     assert not list(cached.parent.rglob("secret.txt"))

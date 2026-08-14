@@ -77,7 +77,10 @@ def _valid_name(name: str) -> bool:
 
 
 def valid_repo(repo: str) -> bool:
-    return bool(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo))
+    parts = repo.split("/")
+    return len(parts) == 2 and all(
+        part not in (".", "..") and re.fullmatch(r"[A-Za-z0-9_.-]+", part) for part in parts
+    )
 
 
 def entries() -> list[Corpus]:

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import hashlib
 import io
 import json
 import os
@@ -71,11 +70,11 @@ class RemoteCache:
     @property
     def root(self) -> Path:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-        key = hashlib.sha256(self.repo.lower().encode()).hexdigest()[:24]
-        return base / "paperstack" / key
+        owner, name = self.repo.lower().split("/", 1)
+        return base / "paperstack" / "repos" / owner / name
 
     @property
-    def legacy_root(self) -> Path:
+    def _old_cache_root(self) -> Path:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
         return base / "paperstack" / self.repo.replace("/", "_")
 
@@ -200,7 +199,7 @@ def _sync(cache: RemoteCache, force: bool) -> bool:
     cache.checked.parent.mkdir(parents=True, exist_ok=True)
     if not force and local_sha(cache) == sha and cache_valid(cache):
         cache.checked.touch()
-        shutil.rmtree(cache.legacy_root, ignore_errors=True)
+        shutil.rmtree(cache._old_cache_root, ignore_errors=True)
         return True
 
     # Pin the archive to the recorded commit.
@@ -259,7 +258,7 @@ def _sync(cache: RemoteCache, force: bool) -> bool:
         shutil.rmtree(tmp, ignore_errors=True)
     # Only successful syncs refresh the TTL.
     cache.checked.touch()
-    shutil.rmtree(cache.legacy_root, ignore_errors=True)
+    shutil.rmtree(cache._old_cache_root, ignore_errors=True)
     return True
 
 
@@ -594,7 +593,7 @@ def _run_corpus(a: argparse.Namespace) -> int:
                 if not a.yes:
                     die("cache deletion requires --yes")
                 cache = RemoteCache(selected.location)
-                for path in (cache.root, cache.legacy_root):
+                for path in (cache.root, cache._old_cache_root):
                     try:
                         shutil.rmtree(path)
                     except FileNotFoundError:
