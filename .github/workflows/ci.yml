@@ -20,9 +20,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v9.0.0
       - run: make all
+      - run: git tag dblp-index-2099.01.01
       - run: uv build
+      - run: "! ls dist/paperstack_cli-2099* 2>/dev/null"
 
       - name: Check the installed wheel and synthetic corpus
         run: |

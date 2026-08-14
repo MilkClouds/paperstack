@@ -12,7 +12,7 @@ fetch replaces that slice before merging by DBLP key, so upstream corrections an
 gh release download dblp-index-PREVIOUS --pattern dblp.parquet --dir /tmp/dblp-previous \
   --repo MilkClouds/paperstack
 uv run paperstack index dblp build /tmp/dblp.parquet \
-  --snapshot YYYY.MM \
+  --snapshot YYYY.MM.DD \
   --base /tmp/dblp-previous/dblp.parquet \
   --year 2025 --year 2026
 sha256sum /tmp/dblp.parquet
@@ -31,7 +31,7 @@ fetch.
 Omit `--base` and year filters to fetch every configured venue-year directly from DBLP:
 
 ```bash
-uv run paperstack index dblp build /tmp/dblp.parquet --snapshot YYYY.MM
+uv run paperstack index dblp build /tmp/dblp.parquet --snapshot YYYY.MM.DD
 ```
 
 This is intentionally slower and serves as a reproducibility and disaster-recovery path. `--base-url` can select a

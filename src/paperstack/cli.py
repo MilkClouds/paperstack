@@ -1064,7 +1064,7 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         _output(dblp_sub.add_parser(command))
     s = dblp_sub.add_parser("build", help="build or refresh a snapshot directly from DBLP")
     s.add_argument("output", type=Path)
-    s.add_argument("--snapshot", required=True, help="YYYY.MM snapshot version")
+    s.add_argument("--snapshot", required=True, help="YYYY.MM.DD snapshot version")
     s.add_argument("--base", type=Path, help="existing DBLP Parquet to merge into")
     s.add_argument("--venue", action="append", dest="venues")
     s.add_argument("--year", action="append", type=int, dest="years")

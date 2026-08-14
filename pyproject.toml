@@ -4,7 +4,7 @@ dynamic = ["version"]
 description = "Review, inspect, and retrieve research sources from one CLI"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11.4" # First 3.11 release with tarfile.extractall(filter=).
+requires-python = ">=3.11.4"
 dependencies = [
     "filelock>=3.20",
     "polars>=1.43",
@@ -46,6 +46,10 @@ line-length = 119
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.version.raw-options]
+tag_regex = "^v(?P<version>\\d+\\.\\d+\\.\\d+(?:[a-zA-Z0-9.-]*)?)$"
+git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "v[0-9]*"]
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

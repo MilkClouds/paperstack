@@ -40,7 +40,8 @@ paperstack corpus add personal --repo OWNER/private-corpus
 paperstack review sync
 ```
 
-Paperstack stores only the repository name and cache metadata. GitHub credentials remain owned by `gh`.
+Paperstack stores the repository name in its configuration and caches only typed `entries/` content. GitHub
+credentials remain owned by `gh`.
 
 ## Publishing the CLI safely
 

@@ -6,7 +6,8 @@ under its maintainer's control.
 
 It can search typed reviews, initialize and validate entries, inspect external paper metadata, read arXiv sources,
 manage a selected-venue DBLP index, and build a static viewer. A synthetic corpus lives in
-[`examples/corpus`](examples/corpus/README.md); no assessment of real work is bundled with the package.
+[`examples/corpus`](https://github.com/MilkClouds/paperstack/tree/main/examples/corpus); no assessment of real work is
+bundled with the package.
 
 ## Install
 
@@ -59,7 +60,8 @@ paperstack review citations --fetch
 ```
 
 Paper entries, talks, and posts use separate contracts under `entries/{papers,talks,posts}/`. The complete schemas,
-writing guide, and source-reading workflow are in [Entry authoring](docs/ENTRIES.md).
+writing guide, and source-reading workflow are in
+[Entry authoring](https://github.com/MilkClouds/paperstack/blob/main/docs/ENTRIES.md).
 
 ## Inspect papers
 
@@ -97,7 +99,8 @@ paperstack index dblp update
 ```
 
 Installed snapshots are content-addressed and verified by SHA-256, schema, and embedded metadata before an atomic
-pointer switch. See [DBLP snapshot releases](docs/DBLP_RELEASES.md) for release maintenance.
+pointer switch. See
+[DBLP snapshot releases](https://github.com/MilkClouds/paperstack/blob/main/docs/DBLP_RELEASES.md) for maintenance.
 
 ## Configuration
 
