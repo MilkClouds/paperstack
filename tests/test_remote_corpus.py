@@ -1,3 +1,4 @@
+import os
 import stat
 
 from paperstack import remote_corpus
@@ -8,8 +9,9 @@ def test_cache_root_is_private_and_lock_is_not_world_readable(tmp_path, monkeypa
     cache = remote_corpus.RemoteCache("example/private")
     with remote_corpus.cache_lock(cache) as mine:
         assert mine is True
-    assert stat.S_IMODE(cache.root.stat().st_mode) == 0o700
-    assert stat.S_IMODE(cache.lock.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(cache.root.stat().st_mode) == 0o700
+        assert stat.S_IMODE(cache.lock.stat().st_mode) == 0o600
 
 
 def test_legacy_cache_without_bound_manifest_is_rejected(tmp_path, monkeypatch):

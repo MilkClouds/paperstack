@@ -414,7 +414,7 @@ def install(
             if _download(snapshot, staged) != snapshot.sha256:
                 raise RuntimeError("DBLP snapshot checksum mismatch")
             metadata, count = _validate_index(staged, snapshot)
-            with staged.open("rb") as handle:
+            with staged.open("r+b") as handle:
                 os.fsync(handle.fileno())
             published = _publish(staged, snapshot, metadata)
             for legacy in _legacy_paths():
@@ -452,7 +452,7 @@ def install_file(path: Path) -> dict:
             shutil.copyfile(path, staged)
             if _sha256(staged) != digest:
                 raise RuntimeError("DBLP snapshot checksum mismatch after copying")
-            with staged.open("rb") as handle:
+            with staged.open("r+b") as handle:
                 os.fsync(handle.fileno())
             published = _publish(staged, snapshot, metadata)
         finally:

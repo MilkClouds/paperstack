@@ -328,7 +328,7 @@ def test_install_fsyncs_asset_and_pointer_publication(monkeypatch, tmp_path):
 
     dblp_index.install(snapshot=_snapshot("fixture", source))
 
-    assert len(calls) == 4
+    assert len(calls) == (2 if dblp_index.os.name == "nt" else 4)
 
 
 def test_update_skips_installed_latest_snapshot(monkeypatch, tmp_path):
