@@ -1,6 +1,6 @@
 [project]
 name = "paperstack-cli"
-version = "0.3.1"
+dynamic = ["version"]
 description = "Review, inspect, and retrieve research sources from one CLI"
 readme = "README.md"
 license = "Apache-2.0"
@@ -44,6 +44,9 @@ include = ["/src/paperstack", "/scripts/build/site", "/scripts/build/vendor/mark
 [tool.ruff]
 line-length = 119
 
+[tool.hatch.version]
+source = "vcs"
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
