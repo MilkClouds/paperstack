@@ -183,26 +183,3 @@ def test_offline_dblp_search_miss_does_not_use_network(monkeypatch):
     result = metadata.search("dblp", "missing title", local_only=True)
 
     assert result["status"] == "no_match"
-
-
-def test_request_merges_existing_query_parameters(monkeypatch):
-    seen = []
-
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return None
-
-        def read(self):
-            return b"ok"
-
-    def urlopen(request, timeout):
-        seen.append(request.full_url)
-        return Response()
-
-    monkeypatch.setattr(metadata.urllib.request, "urlopen", urlopen)
-    monkeypatch.setattr(metadata.time, "sleep", lambda seconds: None)
-    assert metadata.request("https://example.test/api?existing=1", {"next": "2"}) == b"ok"
-    assert seen == ["https://example.test/api?existing=1&next=2"]

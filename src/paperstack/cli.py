@@ -8,15 +8,23 @@ Exit codes: 0 hit, 1 no match, 2 ambiguous, 3 unavailable corpus.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import hashlib
+import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from filelock import FileLock, Timeout
 
 from .entry_types import (
     ENTRY_TYPES,
@@ -26,7 +34,6 @@ from .entry_types import (
     render_scaffold,
     split_front,
 )
-from .remote_corpus import RemoteCache, cache_valid, is_corpus, local_sha, purge, recover, stale, sync
 
 
 def warn(msg: str) -> None:
@@ -49,6 +56,192 @@ def _ttl() -> int:
     except ValueError:
         warn(f"PAPERSTACK_TTL={raw!r} is not a whole number of seconds; using 3600")
         return 3600
+
+
+TTL = _ttl()
+
+SHA_FILE = ".paperstack-sha"  # Moves atomically with the corpus.
+CACHE_FORMAT_FILE = ".paperstack-cache-v2"
+
+
+@dataclass(frozen=True)
+class RemoteCache:
+    repo: str
+
+    @property
+    def root(self) -> Path:
+        base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+        key = hashlib.sha256(self.repo.lower().encode()).hexdigest()[:24]
+        return base / "paperstack" / key
+
+    @property
+    def corpus(self) -> Path:
+        return self.root / "corpus"
+
+    @property
+    def staged(self) -> Path:
+        return self.root / "corpus.old"
+
+    @property
+    def checked(self) -> Path:
+        return self.root / "last-checked"
+
+    @property
+    def lock(self) -> Path:
+        return self.root / "lock"
+
+
+def gh(*args: str, binary: bool = False) -> bytes | str | None:
+    """Return gh stdout, or None on failure."""
+    try:
+        p = subprocess.run(["gh", *args], capture_output=True, timeout=120, check=False)
+    except FileNotFoundError:
+        return None
+    except subprocess.TimeoutExpired:
+        return None
+    if p.returncode != 0:
+        return None
+    return p.stdout if binary else p.stdout.decode().strip()
+
+
+def remote_sha(repo: str) -> str | None:
+    return gh("api", f"repos/{repo}/commits/HEAD", "--jq", ".sha") or None
+
+
+def local_sha(cache: RemoteCache) -> str | None:
+    f = cache.corpus / SHA_FILE
+    return f.read_text().strip() if f.is_file() else None
+
+
+def is_corpus(d: Path) -> bool:
+    return (d / "entries").is_dir()
+
+
+def valid(d: Path) -> bool:
+    return bool(entry_paths(d))
+
+
+def cache_valid(cache: RemoteCache, path: Path | None = None) -> bool:
+    root = path or cache.corpus
+    return is_corpus(root) and (root / CACHE_FORMAT_FILE).is_file()
+
+
+@contextlib.contextmanager
+def cache_lock(cache: RemoteCache):
+    """Serialize cache writes; yield False when the lock is busy."""
+    cache.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(cache.root, 0o700)
+    lock = FileLock(cache.lock, mode=0o600)
+    try:
+        try:
+            lock.acquire(timeout=0)
+        except Timeout:
+            yield False
+            return
+        yield True
+    finally:
+        if lock.is_locked:
+            lock.release()
+
+
+def install(cache: RemoteCache, staged: Path) -> bool:
+    """Publish a staged corpus without exposing partial data."""
+    cache.root.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.rmtree(cache.staged, ignore_errors=True)
+        if cache.corpus.exists():
+            os.replace(cache.corpus, cache.staged)
+        os.replace(staged, cache.corpus)
+    except OSError as e:
+        warn(f"could not publish the downloaded corpus ({e})")
+        if not cache.corpus.exists() and cache.staged.exists():
+            with contextlib.suppress(OSError):
+                os.replace(cache.staged, cache.corpus)
+        return False
+    shutil.rmtree(cache.staged, ignore_errors=True)
+    return True
+
+
+def recover(cache: RemoteCache) -> bool:
+    """Restore the backup left by an interrupted install."""
+    if cache_valid(cache) or not cache_valid(cache, cache.staged):
+        return False
+    with cache_lock(cache) as mine:
+        if not mine or cache_valid(cache) or not cache_valid(cache, cache.staged):
+            return False
+        try:
+            os.replace(cache.staged, cache.corpus)
+        except OSError as e:
+            warn(f"could not recover the cached corpus ({e})")
+            return False
+    warn("recovered the cached corpus from an interrupted sync")
+    return True
+
+
+def sync(repo: str, force: bool = False) -> bool:
+    """Update the cache from main."""
+    cache = RemoteCache(repo)
+    with cache_lock(cache) as mine:
+        if not mine:
+            warn("another paperstack is syncing; using the cache as it stands")
+            return cache_valid(cache)
+        return _sync(cache, force)
+
+
+def _sync(cache: RemoteCache, force: bool) -> bool:
+    sha = remote_sha(cache.repo)
+    if not sha:
+        return False
+    cache.checked.parent.mkdir(parents=True, exist_ok=True)
+    if not force and local_sha(cache) == sha and cache_valid(cache):
+        cache.checked.touch()
+        return True
+
+    # Pin the archive to the recorded commit.
+    blob = gh("api", f"repos/{cache.repo}/tarball/{sha}", binary=True)
+    if not blob:
+        return False
+
+    tmp = Path(tempfile.mkdtemp(dir=cache.root, prefix=".staging-"))
+    try:
+        try:
+            with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
+                tar.extractall(tmp, filter="data")
+        except (tarfile.TarError, OSError, EOFError) as e:
+            warn(f"the downloaded archive is unreadable ({e})")
+            return False
+        roots = [p for p in tmp.iterdir() if p.is_dir()]
+        if len(roots) != 1 or not is_corpus(roots[0]):
+            return False
+        published = tmp / "published"
+        for directory in ("papers", "talks", "posts"):
+            (published / "entries" / directory).mkdir(parents=True, mode=0o700)
+        for source in entry_paths(roots[0]):
+            if source.is_symlink():
+                return False
+            target = published / "entries" / source.relative_to(roots[0] / "entries")
+            shutil.copyfile(source, target)
+            os.chmod(target, 0o600)
+        for name in ("collections.json", "citations.json"):
+            source = roots[0] / "entries" / name
+            if source.is_file() and not source.is_symlink():
+                shutil.copyfile(source, published / "entries" / name)
+                os.chmod(published / "entries" / name, 0o600)
+        (published / SHA_FILE).write_text(sha + "\n")
+        (published / CACHE_FORMAT_FILE).write_text("2\n")
+        if not install(cache, published):
+            return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    # Only successful syncs refresh the TTL.
+    cache.checked.touch()
+    return True
+
+
+def stale(cache: RemoteCache) -> bool:
+    if not cache.checked.is_file():
+        return True
+    return time.time() - cache.checked.stat().st_mtime > TTL
 
 
 def git_toplevel() -> Path | None:
@@ -93,7 +286,7 @@ def _resolve_remote(repo: str, *, offline: bool, force_sync: bool) -> Path:
         if not have:
             die(f"no cached copy of {repo} and --offline was given; drop --offline to fetch one")
         return cache.corpus
-    if (force_sync or not have or stale(cache, _ttl())) and not sync(repo, force=force_sync):
+    if (force_sync or not have or stale(cache)) and not sync(repo, force=force_sync):
         if not have:
             die(
                 f"cannot reach {repo} and there is no cached copy.\n"
@@ -320,8 +513,8 @@ def _review_commands(sub) -> None:
 
 def _corpus_commands(sub) -> None:
     s = sub.add_parser("init", help="create and register an empty local corpus")
-    s.add_argument("name", help="short profile name")
-    s.add_argument("--path", type=Path, required=True, help="new or initialized corpus directory")
+    s.add_argument("name")
+    s.add_argument("--path", type=Path, required=True)
 
     s = sub.add_parser("add", help="register a local directory or GitHub repository")
     s.add_argument("name", help="short profile name")
@@ -337,8 +530,8 @@ def _corpus_commands(sub) -> None:
 
     s = sub.add_parser("remove", help="forget a corpus without deleting its data")
     s.add_argument("name")
-    s.add_argument("--purge-cache", action="store_true", help="also delete this repo profile's local cache")
-    s.add_argument("--yes", action="store_true", help="confirm cache deletion")
+    s.add_argument("--purge-cache", action="store_true")
+    s.add_argument("--yes", action="store_true")
 
 
 def _run_corpus(a: argparse.Namespace) -> int:
@@ -370,15 +563,19 @@ def _run_corpus(a: argparse.Namespace) -> int:
             selected = next((item for item in corpora.entries() if item.name == a.name), None)
             if selected is None:
                 raise corpora.ConfigError(f"unknown corpus: {a.name}")
-            purged = False
             if a.purge_cache:
                 if selected.kind != "repo":
                     die("--purge-cache applies only to GitHub corpus profiles")
                 if not a.yes:
                     die("cache deletion requires --yes")
-                purged = purge(selected.location)
+                try:
+                    shutil.rmtree(RemoteCache(selected.location).root)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    die(f"could not delete the corpus cache ({exc})")
             item = corpora.remove(a.name)
-            suffix = "; cache deleted" if purged else "; data was not deleted"
+            suffix = "; cache deleted" if a.purge_cache else "; data was not deleted"
             print(f"removed {item.name}{suffix}")
             return 0
         if a.corpus_cmd == "list":
@@ -387,7 +584,15 @@ def _run_corpus(a: argparse.Namespace) -> int:
             if a.json:
                 print(
                     json.dumps(
-                        [_corpus_status(item, bool(active and item.name == active.name)) for item in items],
+                        [
+                            {
+                                "name": item.name,
+                                "kind": item.kind,
+                                "location": item.location,
+                                "active": bool(active and item.name == active.name),
+                            }
+                            for item in items
+                        ],
                         indent=2,
                     )
                 )
@@ -396,21 +601,11 @@ def _run_corpus(a: argparse.Namespace) -> int:
             else:
                 for item in items:
                     marker = "*" if active and item.name == active.name else " "
-                    status = _corpus_status(item, bool(active and item.name == active.name))
-                    cache = f"  cache={status['cache_bytes']}B" if item.kind == "repo" and status["cached"] else ""
-                    print(f"{marker} {item.name:<16} {item.kind:<4} {item.location}{cache}")
+                    print(f"{marker} {item.name:<16} {item.kind:<4} {item.location}")
             return 0
         raise AssertionError(a.corpus_cmd)
     except corpora.ConfigError as exc:
         die(str(exc))
-
-
-def _corpus_status(item, active: bool) -> dict:
-    value = {"name": item.name, "kind": item.kind, "location": item.location, "active": active}
-    if item.kind == "repo":
-        cache = RemoteCache(item.location)
-        value.update(cached=cache_valid(cache), cache_bytes=cache.size_bytes(), sha=local_sha(cache))
-    return value
 
 
 def _review_init(root: Path, a: argparse.Namespace) -> int:

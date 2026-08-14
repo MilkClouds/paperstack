@@ -12,7 +12,7 @@ fetch replaces that slice before merging by DBLP key, so upstream corrections an
 gh release download dblp-index-PREVIOUS --pattern dblp.parquet --dir /tmp/dblp-previous \
   --repo MilkClouds/paperstack
 uv run paperstack index dblp build /tmp/dblp.parquet \
-  --snapshot YYYY.MM.DD \
+  --snapshot YYYY.MM \
   --base /tmp/dblp-previous/dblp.parquet \
   --year 2025 --year 2026
 sha256sum /tmp/dblp.parquet
@@ -31,7 +31,7 @@ fetch.
 Omit `--base` and year filters to fetch every configured venue-year directly from DBLP:
 
 ```bash
-uv run paperstack index dblp build /tmp/dblp.parquet --snapshot YYYY.MM.DD
+uv run paperstack index dblp build /tmp/dblp.parquet --snapshot YYYY.MM
 ```
 
 This is intentionally slower and serves as a reproducibility and disaster-recovery path. `--base-url` can select a
@@ -42,8 +42,8 @@ The Parquet builder stores only structured lookup fields, Zstd-compresses the fi
 URL, schema version, coverage, refreshed venue-year counts, and record count. It does not store raw BibTeX. The
 builder and installer reject schema or metadata mismatches and fewer than 250,000 records.
 
-Installation and update use the public GitHub Releases API and direct asset URLs; users do not need `gh` or a GitHub
-login. Local assets are immutable and named by SHA-256; `current.json` is replaced atomically.
+Installation and update use public GitHub Release URLs and do not require `gh`. Local assets are immutable and named
+by SHA-256; `current.json` is replaced atomically.
 
 Verify the Release asset digest, a clean `paperstack index dblp install`, and an older installation followed by
 `paperstack index dblp update`. Update `SNAPSHOT`, `INDEX_URL`, and `INDEX_SHA256` for new installs; existing clients

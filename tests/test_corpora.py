@@ -1,9 +1,11 @@
+import io
 import json
 import sys
+import tarfile
 
 import pytest
 
-from paperstack import cli, corpora, entry_types, remote_corpus
+from paperstack import cli, corpora, entry_types
 
 
 def _corpus(path):
@@ -87,22 +89,59 @@ def test_cli_first_profile_is_active_and_use_switches_it(tmp_path, monkeypatch, 
 def test_cli_init_bootstraps_an_empty_corpus(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     root = tmp_path / "empty"
+
     assert _run(monkeypatch, "corpus", "init", "work", "--path", str(root)) == 0
     assert corpora.active().location == str(root)
     assert json.loads((root / "entries" / "collections.json").read_text())["collections"] == []
 
 
-def test_remove_can_purge_only_a_confirmed_repo_cache(tmp_path, monkeypatch):
+def test_remove_can_purge_a_repo_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     corpora.add("private", kind="repo", location="example/papers")
-    cache = remote_corpus.RemoteCache("example/papers")
+    cache = cli.RemoteCache("example/papers")
     cache.root.mkdir(parents=True)
-    (cache.root / "secret").write_text("cached")
+    (cache.root / "cached").write_text("value")
+
     assert _run(monkeypatch, "corpus", "remove", "private", "--purge-cache", "--yes") == 0
     assert not cache.root.exists()
 
 
 def test_remote_cache_keys_do_not_collide(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    assert remote_corpus.RemoteCache("a_b/c").root != remote_corpus.RemoteCache("a/b_c").root
+    assert cli.RemoteCache("a_b/c").root != cli.RemoteCache("a/b_c").root
+
+
+def test_failed_cache_publish_restores_the_previous_copy(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    cache = cli.RemoteCache("example/private")
+    (cache.corpus / "entries").mkdir(parents=True)
+    (cache.corpus / "old").write_text("value")
+    staged = tmp_path / "staged"
+    (staged / "entries").mkdir(parents=True)
+    replace = cli.os.replace
+
+    def fail_new(source, destination):
+        if source == staged and destination == cache.corpus:
+            raise OSError("injected")
+        return replace(source, destination)
+
+    monkeypatch.setattr(cli.os, "replace", fail_new)
+    assert cli.install(cache, staged) is False
+    assert (cache.corpus / "old").read_text() == "value"
+
+
+def test_remote_cache_keeps_entries_only(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    source = _corpus(tmp_path / "source")
+    (source / "secret.txt").write_text("private")
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode="w:gz") as bundle:
+        bundle.add(source, arcname="repo")
+    monkeypatch.setattr(cli, "remote_sha", lambda repo: "a" * 40)
+    monkeypatch.setattr(cli, "gh", lambda *args, **kwargs: archive.getvalue())
+
+    assert cli.sync("example/private") is True
+    cached = cli.RemoteCache("example/private").corpus
+    assert (cached / "entries" / "papers" / "example2026paper.md").is_file()
+    assert not (cached / "secret.txt").exists()

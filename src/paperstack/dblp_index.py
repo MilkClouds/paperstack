@@ -208,23 +208,17 @@ def _release_version(tag: str) -> tuple[int, int, int] | None:
 def _github_json(endpoint: str) -> object:
     request = urllib.request.Request(
         f"https://api.github.com/{endpoint}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "paperstack (+https://github.com/MilkClouds/paperstack)",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "paperstack"},
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            payload = response.read(10 * 1024 * 1024 + 1)
+            payload = response.read()
     except TimeoutError as exc:
         raise RuntimeError("GitHub Release lookup timed out") from exc
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"GitHub Release lookup failed with HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"GitHub Release lookup failed ({exc.reason})") from exc
-    if len(payload) > 10 * 1024 * 1024:
-        raise RuntimeError("GitHub Release response is unexpectedly large")
     try:
         return json.loads(payload)
     except json.JSONDecodeError as exc:
@@ -372,12 +366,8 @@ def _download(snapshot: Snapshot, staged: Path) -> str:
             while chunk := response.read(1 << 20):
                 handle.write(chunk)
                 digest.update(chunk)
-    except TimeoutError as exc:
-        raise RuntimeError("DBLP snapshot download timed out") from exc
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"DBLP snapshot download failed with HTTP {exc.code}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"DBLP snapshot download failed ({exc.reason})") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(f"DBLP snapshot download failed ({exc})") from exc
     return digest.hexdigest()
 
 

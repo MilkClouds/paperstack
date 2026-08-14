@@ -49,7 +49,8 @@ def convert(arxiv_id: str) -> bool:
         import pymupdf4llm
     except ImportError:
         print(
-            "PDF conversion needs an optional dependency; install `paperstack-cli[pdf]` (or `paperstack-cli[full]`).",
+            "PDF conversion needs `paperstack-cli[pdf]`; reinstall with "
+            "`uv tool install --force 'paperstack-cli[pdf]'`.",
             file=sys.stderr,
         )
         return False
@@ -66,11 +67,7 @@ def convert(arxiv_id: str) -> bool:
     d.mkdir(parents=True, exist_ok=True)
     pdf_path = d / "paper.pdf"
     pdf_path.write_bytes(raw)
-    try:
-        md = pymupdf4llm.to_markdown(str(pdf_path))
-    except Exception as exc:  # noqa: BLE001 - isolate optional converter failures from the CLI.
-        print(f"{arxiv_id}: PDF conversion failed ({exc})", file=sys.stderr)
-        return False
+    md = pymupdf4llm.to_markdown(str(pdf_path))
     if len(md) < 500:
         print(f"{arxiv_id}: converted to only {len(md)} chars, treat as a failure", file=sys.stderr)
         return False

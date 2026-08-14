@@ -133,7 +133,6 @@ def remove(name: str) -> Corpus:
 
 
 def initialize(path: Path) -> Path:
-    """Create an empty corpus without overwriting unrelated content."""
     path = path.expanduser().resolve()
     if path.exists() and not path.is_dir():
         raise ConfigError(f"corpus path is not a directory: {path}")
@@ -142,17 +141,12 @@ def initialize(path: Path) -> Path:
     entries = path / "entries"
     for directory in ("papers", "talks", "posts"):
         (entries / directory).mkdir(parents=True, exist_ok=True)
-    documents = {
+    defaults = {
         "collections.json": {"version": 1, "collections": []},
         "citations.json": {"last_updated": None, "papers": {}},
     }
-    for name, document in documents.items():
+    for name, document in defaults.items():
         target = entries / name
-        if target.exists():
-            try:
-                json.loads(target.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise ConfigError(f"existing corpus file is unreadable: {target}") from exc
-            continue
-        target.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+        if not target.exists():
+            target.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     return path

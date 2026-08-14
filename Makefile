@@ -15,7 +15,7 @@ example:                   ## validate and build the synthetic corpus
 	@PAPERSTACK_DIR="$$PWD/examples/corpus" uv run paperstack viewer build
 
 clean:                     ## remove generated local state
-	@rm -rf _site dist .pytest_cache .ruff_cache src/paperstack/__pycache__ tests/__pycache__
+	@rm -rf _site dist .pytest_cache .ruff_cache src/paperstack/__pycache__ tests/__pycache__ uv.lock
 
 help:                      ## list targets
 	@grep -E '^[a-z]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'

@@ -49,18 +49,9 @@ def request(
     data: bytes | None = None,
 ) -> bytes:
     if params:
-        parsed = urllib.parse.urlsplit(url)
-        query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
-        query.extend((str(key), str(value)) for key, value in params.items())
-        url = urllib.parse.urlunsplit((*parsed[:3], urllib.parse.urlencode(query), parsed.fragment))
+        url += "?" + urllib.parse.urlencode(params)
     host = urllib.parse.urlparse(url).netloc
-    interval = (
-        3.0
-        if host == "arxiv.org" or host.endswith(".arxiv.org")
-        else 1.1
-        if host == "dblp.org" or host.endswith(".dblp.org")
-        else 0.5
-    )
+    interval = 3.0 if "arxiv.org" in host else 1.1 if "dblp.org" in host else 0.5
     request_headers = {
         "User-Agent": "paperstack (+https://github.com/MilkClouds/paperstack)",
         **(headers or {}),
@@ -76,15 +67,9 @@ def request(
                 return response.read()
         except urllib.error.HTTPError as exc:
             _last_request[host] = time.monotonic()
-            if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
+            if exc.code != 429 or attempt == 2:
                 raise
-            retry_after = exc.headers.get("Retry-After") if exc.headers else None
-            time.sleep(float(retry_after) if retry_after and retry_after.isdigit() else 2**attempt)
-        except (urllib.error.URLError, TimeoutError):
-            _last_request[host] = time.monotonic()
-            if attempt == 2:
-                raise
-            time.sleep(2**attempt)
+            time.sleep(5 * (attempt + 1))
     raise RuntimeError("unreachable request retry state")
 
 
