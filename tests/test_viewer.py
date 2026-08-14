@@ -134,3 +134,17 @@ def test_empty_initialized_corpus_builds(tmp_path):
     (root / "entries" / "collections.json").write_text('{"version": 1, "collections": []}')
     (root / "entries" / "citations.json").write_text('{"papers": {}}')
     assert viewer.build(root, tmp_path / "site") == 0
+
+
+def test_interrupted_publish_backup_is_recovered(tmp_path, monkeypatch):
+    root = _corpus(tmp_path / "corpus")
+    output = tmp_path / "site"
+    viewer.build(root, output)
+    before = (output / "data.json").read_bytes()
+    backup = tmp_path / ".site.backup"
+    viewer.os.replace(output, backup)
+    monkeypatch.setattr(viewer, "_write_site", lambda *args: (_ for _ in ()).throw(OSError("injected")))
+
+    with pytest.raises(OSError, match="injected"):
+        viewer.build(root, output)
+    assert (output / "data.json").read_bytes() == before

@@ -75,6 +75,11 @@ class RemoteCache:
         return base / "paperstack" / key
 
     @property
+    def legacy_root(self) -> Path:
+        base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+        return base / "paperstack" / self.repo.replace("/", "_")
+
+    @property
     def corpus(self) -> Path:
         return self.root / "corpus"
 
@@ -195,6 +200,7 @@ def _sync(cache: RemoteCache, force: bool) -> bool:
     cache.checked.parent.mkdir(parents=True, exist_ok=True)
     if not force and local_sha(cache) == sha and cache_valid(cache):
         cache.checked.touch()
+        shutil.rmtree(cache.legacy_root, ignore_errors=True)
         return True
 
     # Pin the archive to the recorded commit.
@@ -204,37 +210,56 @@ def _sync(cache: RemoteCache, force: bool) -> bool:
 
     tmp = Path(tempfile.mkdtemp(dir=cache.root, prefix=".staging-"))
     try:
-        try:
-            with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
-                tar.extractall(tmp, filter="data")
-        except (tarfile.TarError, OSError, EOFError) as e:
-            warn(f"the downloaded archive is unreadable ({e})")
-            return False
-        roots = [p for p in tmp.iterdir() if p.is_dir()]
-        if len(roots) != 1 or not is_corpus(roots[0]):
-            return False
         published = tmp / "published"
         for directory in ("papers", "talks", "posts"):
             (published / "entries" / directory).mkdir(parents=True, mode=0o700)
-        for source in entry_paths(roots[0]):
-            if source.is_symlink():
-                return False
-            target = published / "entries" / source.relative_to(roots[0] / "entries")
-            shutil.copyfile(source, target)
-            os.chmod(target, 0o600)
-        for name in ("collections.json", "citations.json"):
-            source = roots[0] / "entries" / name
-            if source.is_file() and not source.is_symlink():
-                shutil.copyfile(source, published / "entries" / name)
-                os.chmod(published / "entries" / name, 0o600)
+        try:
+            with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
+                root_name = None
+                saw_entries = False
+                seen = set()
+                for member in tar:
+                    parts = Path(member.name).parts
+                    if len(parts) < 2:
+                        continue
+                    root_name = root_name or parts[0]
+                    if parts[0] != root_name:
+                        return False
+                    relative = parts[1:]
+                    saw_entries = saw_entries or relative[:1] == ("entries",)
+                    allowed = relative in (("entries", "collections.json"), ("entries", "citations.json")) or (
+                        len(relative) == 3
+                        and relative[:2] in (("entries", "papers"), ("entries", "talks"), ("entries", "posts"))
+                        and relative[2].endswith(".md")
+                    )
+                    if not allowed:
+                        continue
+                    if not member.isfile() or relative in seen:
+                        return False
+                    seen.add(relative)
+                    source = tar.extractfile(member)
+                    if source is None:
+                        return False
+                    target = published.joinpath(*relative)
+                    with source, target.open("wb") as output:
+                        shutil.copyfileobj(source, output)
+                    os.chmod(target, 0o600)
+        except (tarfile.TarError, OSError, EOFError) as e:
+            warn(f"the downloaded archive is unreadable ({e})")
+            return False
+        if not saw_entries:
+            return False
         (published / SHA_FILE).write_text(sha + "\n")
         (published / CACHE_FORMAT_FILE).write_text("2\n")
+        os.chmod(published / SHA_FILE, 0o600)
+        os.chmod(published / CACHE_FORMAT_FILE, 0o600)
         if not install(cache, published):
             return False
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     # Only successful syncs refresh the TTL.
     cache.checked.touch()
+    shutil.rmtree(cache.legacy_root, ignore_errors=True)
     return True
 
 
@@ -568,12 +593,14 @@ def _run_corpus(a: argparse.Namespace) -> int:
                     die("--purge-cache applies only to GitHub corpus profiles")
                 if not a.yes:
                     die("cache deletion requires --yes")
-                try:
-                    shutil.rmtree(RemoteCache(selected.location).root)
-                except FileNotFoundError:
-                    pass
-                except OSError as exc:
-                    die(f"could not delete the corpus cache ({exc})")
+                cache = RemoteCache(selected.location)
+                for path in (cache.root, cache.legacy_root):
+                    try:
+                        shutil.rmtree(path)
+                    except FileNotFoundError:
+                        pass
+                    except OSError as exc:
+                        die(f"could not delete the corpus cache ({exc})")
             item = corpora.remove(a.name)
             suffix = "; cache deleted" if a.purge_cache else "; data was not deleted"
             print(f"removed {item.name}{suffix}")

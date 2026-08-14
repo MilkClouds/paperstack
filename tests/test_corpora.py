@@ -135,6 +135,9 @@ def test_remote_cache_keeps_entries_only(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     source = _corpus(tmp_path / "source")
     (source / "secret.txt").write_text("private")
+    legacy = cli.RemoteCache("example/private").legacy_root
+    legacy.mkdir(parents=True)
+    (legacy / "secret.txt").write_text("old private cache")
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode="w:gz") as bundle:
         bundle.add(source, arcname="repo")
@@ -145,3 +148,5 @@ def test_remote_cache_keeps_entries_only(tmp_path, monkeypatch):
     cached = cli.RemoteCache("example/private").corpus
     assert (cached / "entries" / "papers" / "example2026paper.md").is_file()
     assert not (cached / "secret.txt").exists()
+    assert not legacy.exists()
+    assert not list(cached.parent.rglob("secret.txt"))

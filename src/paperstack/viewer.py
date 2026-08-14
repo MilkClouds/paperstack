@@ -93,6 +93,12 @@ def build(root: Path, output: Path) -> int:
         or entry_root in destination.parents
     ):
         raise ValueError("viewer output would replace a broad path, the corpus, or authored entries")
+    backup = destination.parent / f".{destination.name}.backup"
+    if backup.exists() and not destination.exists():
+        marker = backup / ".paperstack-viewer"
+        if not backup.is_dir() or not marker.is_file() or marker.read_text(encoding="utf-8") != "1\n":
+            raise ValueError(f"viewer backup is not owned by Paperstack: {backup}")
+        os.replace(backup, destination)
     if destination.exists() and not destination.is_dir():
         raise ValueError(f"viewer output is not a directory: {destination}")
     if destination.exists() and any(destination.iterdir()):
@@ -101,7 +107,6 @@ def build(root: Path, output: Path) -> int:
             raise ValueError(f"viewer output is a nonempty directory not created by Paperstack: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     staged = Path(tempfile.mkdtemp(dir=destination.parent, prefix=f".{destination.name}.tmp-"))
-    backup = destination.parent / f".{destination.name}.backup"
     try:
         _write_site(root, staged, entries, collections, citations)
         shutil.rmtree(backup, ignore_errors=True)
