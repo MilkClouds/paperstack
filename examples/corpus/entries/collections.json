@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "collections": [
+    {
+      "id": "example",
+      "status": "published",
+      "title": "Example",
+      "description": "Synthetic entries demonstrating the corpus format.",
+      "entries": ["example2026paperstack"]
+    }
+  ]
+}

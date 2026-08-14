@@ -1,0 +1,1 @@
+"""Paperstack command-line package."""

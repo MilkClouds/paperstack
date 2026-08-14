@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' https:; object-src 'none'; base-uri 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Paperstack</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<body class="index-page">
+<header class="site-intro">
+  <h1>Paperstack</h1>
+  <p>Critical paper reviews, technical-post records, and contextual talk notes.</p>
+</header>
+<div id="controls">
+  <section id="collection-panel">
+    <div class="control-label">Collection</div>
+    <details id="collection-picker"><summary><span id="collection-title"></span><span id="collection-count"></span></summary>
+      <div class="collection-grid" id="collection-options"></div>
+    </details>
+    <div id="collection-note"></div>
+  </section>
+  <nav id="scope" aria-label="Entry type"></nav>
+  <details id="filters" open><summary>Filters and order</summary><div id="bar"></div></details>
+</div>
+<div id="stats"></div>
+<div id="list"></div>
+<div id="more-wrap"></div>
+<script src="assets/marked.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+[project]
+name = "paperstack-cli"
+version = "0.3.0"
+description = "Review, inspect, and retrieve research sources from one CLI"
+readme = "README.md"
+requires-python = ">=3.11.4" # First 3.11 release with tarfile.extractall(filter=).
+dependencies = [
+    "polars>=1.43",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+pdf = ["pymupdf4llm>=0.0.17"]
+
+[dependency-groups]
+lint = ["ruff>=0.12"]
+test = ["pytest>=8"]
+dev = [
+    { include-group = "lint" },
+    { include-group = "test" },
+]
+
+[project.urls]
+Repository = "https://github.com/MilkClouds/paperstack"
+Issues = "https://github.com/MilkClouds/paperstack/issues"
+
+[project.scripts]
+paperstack = "paperstack.entrypoint:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paperstack"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"scripts/build/site" = "paperstack/viewer_assets/site"
+"scripts/build/vendor/marked.min.js" = "paperstack/viewer_assets/vendor/marked.min.js"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src/paperstack", "/scripts/build/site", "/scripts/build/vendor/marked.min.js", "/README.md", "/pyproject.toml", "/LICENSE"]
+
+[tool.ruff]
+line-length = 119
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
