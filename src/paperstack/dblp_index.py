@@ -23,7 +23,7 @@ ASSET_NAME = "dblp.parquet"
 MIN_RECORDS = 250_000
 SCHEMA_VERSION = "1"
 INDEX_URL = f"https://github.com/{RELEASE_REPO}/releases/download/dblp-index-{SNAPSHOT}/{ASSET_NAME}"
-INDEX_SHA256 = "fef4b46365331a81fa059852761d91b18a05ef5691169a17f9358e215bcb5fb0"
+INDEX_SHA256 = "2656b1ea5423bfc93be48c4f75a6df94704cde155a064075e9e18fa6ef8938fa"
 
 COLUMNS = (
     "normalized_title",

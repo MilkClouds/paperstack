@@ -1,6 +1,6 @@
 [project]
 name = "paperstack-cli"
-version = "0.3.0"
+version = "0.3.1"
 description = "Review, inspect, and retrieve research sources from one CLI"
 readme = "README.md"
 requires-python = ">=3.11.4" # First 3.11 release with tarfile.extractall(filter=).
