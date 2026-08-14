@@ -26,10 +26,12 @@ Register either a local working tree or a GitHub repository. The first registere
 
 ```bash
 paperstack corpus add work --path ~/research/reviews
+paperstack corpus init new --path ~/research/new-corpus
 paperstack corpus add private --repo OWNER/private-reviews
 paperstack corpus list
 paperstack corpus use private
 paperstack corpus remove work
+paperstack corpus remove private --purge-cache --yes
 ```
 
 Private GitHub repositories use the existing `gh` login without storing its token:

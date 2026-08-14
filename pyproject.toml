@@ -1,10 +1,12 @@
 [project]
 name = "paperstack-cli"
-version = "0.3.1"
+dynamic = ["version"]
 description = "Review, inspect, and retrieve research sources from one CLI"
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.11.4" # First 3.11 release with tarfile.extractall(filter=).
 dependencies = [
+    "filelock>=3.20",
     "polars>=1.43",
     "python-dotenv>=1.2.2",
     "pyyaml>=6",
@@ -34,13 +36,17 @@ packages = ["src/paperstack"]
 [tool.hatch.build.targets.wheel.force-include]
 "scripts/build/site" = "paperstack/viewer_assets/site"
 "scripts/build/vendor/marked.min.js" = "paperstack/viewer_assets/vendor/marked.min.js"
+"scripts/build/vendor/marked.LICENSE" = "paperstack/viewer_assets/vendor/marked.LICENSE"
 
 [tool.hatch.build.targets.sdist]
-include = ["/src/paperstack", "/scripts/build/site", "/scripts/build/vendor/marked.min.js", "/README.md", "/pyproject.toml", "/LICENSE"]
+include = ["/src/paperstack", "/scripts/build/site", "/scripts/build/vendor/marked.min.js", "/scripts/build/vendor/marked.LICENSE", "/README.md", "/pyproject.toml", "/LICENSE"]
 
 [tool.ruff]
 line-length = 119
 
+[tool.hatch.version]
+source = "vcs"
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"

@@ -32,3 +32,14 @@ jobs:
           XDG_CONFIG_HOME="$RUNNER_TEMP/config" paperstack review show example2026paperstack --brief
           XDG_CONFIG_HOME="$RUNNER_TEMP/config" paperstack viewer build --output "$RUNNER_TEMP/site"
           test -f "$RUNNER_TEMP/site/assets/marked.min.js"
+          test -f "$RUNNER_TEMP/site/assets/marked.LICENSE"
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          python-version: "3.14"
+      - run: uv run --group test pytest -q

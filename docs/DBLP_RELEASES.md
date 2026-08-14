@@ -42,8 +42,8 @@ The Parquet builder stores only structured lookup fields, Zstd-compresses the fi
 URL, schema version, coverage, refreshed venue-year counts, and record count. It does not store raw BibTeX. The
 builder and installer reject schema or metadata mismatches and fewer than 250,000 records.
 
-The paperstack repository is private, so installation and update use authenticated `gh api` asset downloads without
-reading or storing its token. Local assets are immutable and named by SHA-256; `current.json` is replaced atomically.
+Installation and update use public GitHub Release URLs and do not require `gh`. Local assets are immutable and named
+by SHA-256; `current.json` is replaced atomically.
 
 Verify the Release asset digest, a clean `paperstack index dblp install`, and an older installation followed by
 `paperstack index dblp update`. Update `SNAPSHOT`, `INDEX_URL`, and `INDEX_SHA256` for new installs; existing clients

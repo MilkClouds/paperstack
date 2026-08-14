@@ -49,8 +49,8 @@ def convert(arxiv_id: str) -> bool:
         import pymupdf4llm
     except ImportError:
         print(
-            "PDF conversion needs the optional dependency: install paperstack[pdf] "
-            "or run `uv tool install --with pymupdf4llm ...`",
+            "PDF conversion needs `paperstack-cli[pdf]`; reinstall with "
+            "`uv tool install --force 'paperstack-cli[pdf]'`.",
             file=sys.stderr,
         )
         return False

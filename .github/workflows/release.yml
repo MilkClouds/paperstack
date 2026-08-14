@@ -1,0 +1,29 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v9.0.0
+      - run: uv run --group lint ruff check .
+      - run: uv run --group lint ruff format --check .
+      - run: uv run --group test pytest -q
+      - run: uv build --no-sources
+      - name: Verify tag version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          test -f "dist/paperstack_cli-${version}-py3-none-any.whl"
+          test -f "dist/paperstack_cli-${version}.tar.gz"
+      - run: uv publish --trusted-publishing always
