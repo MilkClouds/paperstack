@@ -23,6 +23,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          python-version: "3.11"
       - run: make all
       - run: git tag dblp-index-2099.01.01
       - run: uv build
