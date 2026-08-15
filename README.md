@@ -21,6 +21,21 @@ PDF conversion is optional:
 uv tool install 'paperstack-cli[pdf]'
 ```
 
+## AI agent skill
+
+Paperstack ships an [Agent Skills](https://agentskills.io)-compatible skill for Codex, Claude Code, and other
+compatible agents. Install the CLI first, then add the skill globally with the open
+[`skills`](https://github.com/vercel-labs/skills) CLI:
+
+```bash
+npx skills add MilkClouds/paperstack --skill paperstack -g
+```
+
+The installer detects supported agents such as Codex and Claude Code; pass `-a codex -a claude-code` to target them
+explicitly, or omit `-g` for a project-local installation. The shared [`SKILL.md`](skills/paperstack/SKILL.md) keeps
+corpus selection, source inspection, entry authoring, validation, and viewer workflows consistent without exposing a
+private corpus. Use `npx skills update paperstack -g` to update it later.
+
 ## Choose a corpus
 
 Register either a local working tree or a GitHub repository. The first registered corpus becomes active.
