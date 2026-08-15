@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paperstack"
+  short_description: "Use Paperstack to inspect and maintain research corpora"
+  default_prompt: "Use $paperstack to inspect or maintain my selected research corpus."
