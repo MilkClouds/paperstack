@@ -108,6 +108,12 @@ paperstack paper bibtex arxiv:1706.03762
 paperstack paper cache list
 paperstack paper watch add 'ti:"robot learning"' --category cs.RO
 paperstack paper watch check
+paperstack paper search "robot learning" --source s2 --year 2024-2026 --field-of-study "Computer Science"
+paperstack paper s2 paper arxiv:1706.03762 --fields paperId,title,abstract,citationCount
+paperstack paper s2 authors arxiv:1706.03762 --limit 20
+paperstack paper s2 citation arxiv:1706.03762 --format bibtex
+paperstack paper s2 citations arxiv:1706.03762 --limit 100
+paperstack paper s2 references arxiv:1706.03762 --limit 100
 ```
 
 `metadata` accepts `arxiv:`, `doi:`, `dblp:`, and `openreview:` references. `read` and `pdf` require an `arxiv:`
@@ -132,6 +138,26 @@ Search accepts raw arXiv syntax plus repeatable `--category`, `--date-from`, `--
 advances its checkpoint only after a successful arXiv response. Semantic Scholar citation traversal is documented
 separately from the arXiv-native workflow. The upstream `[pro]` local embedding index is not replicated; use a
 dedicated vector index when local semantic search over downloaded papers is required.
+
+### semantic-scholar-mcp replacement
+
+Paperstack covers the tools from
+[`MilkClouds/semantic-scholar-mcp`](https://github.com/MilkClouds/semantic-scholar-mcp) and the citation graph from
+`arxiv-mcp-server` without starting either MCP process:
+
+| semantic-scholar-mcp | Paperstack |
+|---|---|
+| `search_paper` | `paper search --source s2` |
+| `get_paper` | `paper s2 paper` |
+| `get_authors` | `paper s2 authors` |
+| `get_citation` | `paper s2 citation` |
+| citation/reference graph | `paper s2 citations`, `paper s2 references` |
+
+Search supports `--year`, repeatable `--field-of-study`, `--open-access`, `--fields`, `--limit`, and `--offset`.
+Paper, author, and graph commands accept Semantic Scholar IDs plus `arxiv:`, `doi:`, `corpus:`, ACL, PMID, and MAG
+identifiers. Graph results preserve the API's `next` offset; pass it back through `--offset` to continue. Run
+`paperstack config set semantic-scholar.api-key` for higher rate limits, or export `SEMANTIC_SCHOLAR_API_KEY` for
+automation. Anonymous access remains available.
 
 ## Build a viewer
 

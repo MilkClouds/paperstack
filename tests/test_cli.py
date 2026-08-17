@@ -1,9 +1,10 @@
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
-from paperstack import cli, dblp_build, dblp_index, metadata
+from paperstack import cli, dblp_build, dblp_index, metadata, semantic_scholar
 
 
 def _help(monkeypatch, capsys, *args):
@@ -56,6 +57,84 @@ def test_arxiv_replacement_commands_are_discoverable(monkeypatch, capsys):
     assert "--date-from" in search
     assert "--limit" in search
     assert "{add,list,remove,check}" in watch
+
+
+def test_semantic_scholar_replacement_commands_are_discoverable(monkeypatch, capsys):
+    paper = _help(monkeypatch, capsys, "paper")
+    search = _help(monkeypatch, capsys, "paper", "search")
+    s2 = _help(monkeypatch, capsys, "paper", "s2")
+
+    assert "s2" in paper
+    assert "--fields" in search
+    assert "--offset" in search
+    assert "--field-of-study" in search
+    assert "--open-access" in search
+    assert "{paper,authors,citation,citations,references}" in s2
+
+
+def test_semantic_scholar_search_routes_filters(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(
+        semantic_scholar,
+        "search",
+        lambda query, **kwargs: (
+            calls.append((query, kwargs))
+            or {"source": "semantic_scholar", "url": "fixture", "status": "ok", "response": {"data": []}}
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "paperstack",
+            "paper",
+            "search",
+            "robot learning",
+            "--source",
+            "s2",
+            "--year",
+            "2024-2026",
+            "--field-of-study",
+            "Computer Science",
+            "--limit",
+            "25",
+            "--offset",
+            "50",
+            "--open-access",
+            "--json",
+        ],
+    )
+
+    assert cli.main() == 0
+    assert calls == [
+        (
+            "robot learning",
+            {
+                "selected_fields": None,
+                "limit": 25,
+                "offset": 50,
+                "year": "2024-2026",
+                "fields_of_study": ["Computer Science"],
+                "open_access": True,
+            },
+        )
+    ]
+    assert json.loads(capsys.readouterr().out)["status"] == "ok"
+
+
+def test_semantic_scholar_detail_rejects_offline(monkeypatch, capsys):
+    monkeypatch.setattr(
+        semantic_scholar,
+        "paper",
+        lambda *args, **kwargs: pytest.fail("unexpected network lookup"),
+    )
+    monkeypatch.setattr(sys, "argv", ["paperstack", "paper", "s2", "paper", "arxiv:1706.03762", "--offline"])
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 3
+    assert "unavailable offline" in capsys.readouterr().err
 
 
 def test_review_sync_has_no_contradictory_offline_flag(monkeypatch, capsys):

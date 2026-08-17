@@ -50,6 +50,10 @@ paperstack paper read arxiv:2106.09685 --outline
 paperstack paper read arxiv:2106.09685 --section 3
 paperstack paper bibtex arxiv:2106.09685
 paperstack paper cache list
+paperstack paper search "flow matching robotics" --source s2 --year 2024-2026 --limit 20
+paperstack paper s2 paper arxiv:2106.09685
+paperstack paper s2 citations arxiv:2106.09685 --limit 100
+paperstack paper s2 references arxiv:2106.09685 --limit 100
 ```
 
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.
@@ -57,6 +61,11 @@ Use `paperstack paper pdf` only when the source workflow needs a PDF. Install th
 Use raw arXiv query syntax with `paperstack paper search --source arxiv`; add category, date, limit, and sort flags
 instead of routing through an arXiv MCP server. Use `paperstack paper watch add|list|remove|check` for persistent topic
 watches. Use `paperstack paper read --offline` and `paperstack paper cache list` for local-only paper access.
+
+Use `paperstack paper search --source s2` for Semantic Scholar discovery and `paperstack paper s2
+paper|authors|citation|citations|references` for detailed records, citation styles, and paginated graph traversal. Follow
+the returned `next` offset instead of requesting unbounded graphs. Use `paperstack config status` to inspect credential
+availability and `paperstack config set semantic-scholar.api-key` when authenticated access is needed.
 
 ## Author entries
 

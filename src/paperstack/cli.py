@@ -876,6 +876,42 @@ def _run_paper(a: argparse.Namespace) -> int:
     from . import credentials, metadata
 
     offline = getattr(a, "offline", False)
+    if a.paper_cmd == "s2":
+        from . import semantic_scholar
+
+        if offline:
+            die("Semantic Scholar operations are unavailable offline")
+        try:
+            if a.s2_cmd == "paper":
+                result = semantic_scholar.paper(a.paper_id, selected_fields=a.fields)
+            elif a.s2_cmd == "authors":
+                result = semantic_scholar.authors(
+                    a.paper_id,
+                    selected_fields=a.fields,
+                    limit=a.limit,
+                    offset=a.offset,
+                )
+            elif a.s2_cmd == "citation":
+                result = semantic_scholar.citation(a.paper_id, format=a.format)
+            elif a.s2_cmd in ("citations", "references"):
+                result = semantic_scholar.graph(
+                    a.paper_id,
+                    a.s2_cmd,
+                    selected_fields=a.fields,
+                    limit=a.limit,
+                    offset=a.offset,
+                )
+            else:
+                raise AssertionError(a.s2_cmd)
+        except credentials.CredentialsError as exc:
+            die(f"configuration failed: {exc}")
+        except ValueError as exc:
+            die(f"Semantic Scholar lookup failed: {exc}")
+        if a.s2_cmd == "citation" and result["status"] == "ok" and not a.json:
+            print(result["citation"])
+        else:
+            metadata.print_results(result, json_output=a.json)
+        return 0 if result["status"] == "ok" else 1
     if a.paper_cmd == "cache":
         from . import arxiv
 
@@ -956,6 +992,8 @@ def _run_paper(a: argparse.Namespace) -> int:
             if a.source == "arxiv":
                 from . import arxiv
 
+                if a.offset or a.fields or a.year or a.fields_of_study or a.open_access:
+                    die("--offset, --fields, --year, --field-of-study, and --open-access require --source s2")
                 result = arxiv.search(
                     a.query,
                     categories=a.categories,
@@ -964,9 +1002,34 @@ def _run_paper(a: argparse.Namespace) -> int:
                     limit=a.limit,
                     sort=a.sort,
                 )
+            elif a.source == "s2":
+                from . import semantic_scholar
+
+                if a.categories or a.date_from or a.date_to or a.sort != "relevance":
+                    die("--category, --date-from, --date-to, and --sort require --source arxiv")
+                result = semantic_scholar.search(
+                    a.query,
+                    selected_fields=a.fields,
+                    limit=a.limit,
+                    offset=a.offset,
+                    year=a.year,
+                    fields_of_study=a.fields_of_study,
+                    open_access=a.open_access,
+                )
             else:
-                if a.categories or a.date_from or a.date_to or a.limit != 10 or a.sort != "relevance":
-                    die("--category, --date-from, --date-to, --limit, and --sort currently require --source arxiv")
+                if (
+                    a.categories
+                    or a.date_from
+                    or a.date_to
+                    or a.limit != 10
+                    or a.sort != "relevance"
+                    or a.offset
+                    or a.fields
+                    or a.year
+                    or a.fields_of_study
+                    or a.open_access
+                ):
+                    die("advanced search controls require --source arxiv or --source s2")
                 result = metadata.search(a.source, a.query, local_only=offline)
         except credentials.CredentialsError as exc:
             die(f"configuration failed: {exc}")
@@ -1171,6 +1234,11 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s.add_argument("--date-to", help="latest arXiv submission date (YYYY-MM-DD or ISO 8601)")
     s.add_argument("--limit", type=int, default=10, help="maximum results (1-100)")
     s.add_argument("--sort", choices=("relevance", "date"), default="relevance")
+    s.add_argument("--offset", type=int, default=0, help="Semantic Scholar result offset")
+    s.add_argument("--fields", help="comma-separated Semantic Scholar response fields")
+    s.add_argument("--year", help="Semantic Scholar year or year range")
+    s.add_argument("--field-of-study", action="append", dest="fields_of_study")
+    s.add_argument("--open-access", action="store_true", help="require an open-access PDF")
     _output(s)
     _offline(s)
     s = paper_sub.add_parser("read", help="read the LaTeX body, outline, or one section")
@@ -1205,6 +1273,33 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     check = watch_sub.add_parser("check", help="check one or all watches for new papers")
     check.add_argument("topic", nargs="?")
     _output(check)
+    s = paper_sub.add_parser("s2", help="inspect Semantic Scholar records and citation graphs")
+    s2_sub = s.add_subparsers(dest="s2_cmd", required=True)
+    detail = s2_sub.add_parser("paper", help="get detailed paper metadata")
+    detail.add_argument("paper_id", help="Semantic Scholar, arxiv:, doi:, corpus:, ACL, PMID, or MAG identifier")
+    detail.add_argument("--fields", help="comma-separated response fields")
+    _output(detail)
+    _offline(detail)
+    authors = s2_sub.add_parser("authors", help="get paginated author metadata for a paper")
+    authors.add_argument("paper_id")
+    authors.add_argument("--fields", help="comma-separated response fields")
+    authors.add_argument("--limit", type=int, default=100)
+    authors.add_argument("--offset", type=int, default=0)
+    _output(authors)
+    _offline(authors)
+    citation = s2_sub.add_parser("citation", help="export a Semantic Scholar citation style")
+    citation.add_argument("paper_id")
+    citation.add_argument("--format", choices=("bibtex", "apa", "mla", "chicago"), default="bibtex")
+    _output(citation)
+    _offline(citation)
+    for direction in ("citations", "references"):
+        graph = s2_sub.add_parser(direction, help=f"list paginated {direction} for a paper")
+        graph.add_argument("paper_id")
+        graph.add_argument("--fields", help="comma-separated nested paper fields")
+        graph.add_argument("--limit", type=int, default=100)
+        graph.add_argument("--offset", type=int, default=0)
+        _output(graph)
+        _offline(graph)
 
     index = sub.add_parser("index", help="optional local lookup indexes")
     index_sub = index.add_subparsers(dest="index_cmd", required=True)
