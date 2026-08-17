@@ -28,7 +28,7 @@ def names() -> tuple[str, ...]:
 
 
 def credentials_path() -> Path:
-    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "paperstack" / "credentials.json"
 
 

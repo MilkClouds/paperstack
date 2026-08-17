@@ -31,6 +31,22 @@ def test_store_is_private_and_environment_takes_priority(tmp_path, monkeypatch):
     assert credentials.get(credentials.SEMANTIC_SCHOLAR_API_KEY) == "environment-key"
 
 
+def test_empty_xdg_config_home_uses_home_default(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    monkeypatch.chdir(worktree)
+
+    credentials.set_value(credentials.SEMANTIC_SCHOLAR_API_KEY, "stored-key")
+
+    assert credentials.credentials_path() == home / ".config" / "paperstack" / "credentials.json"
+    assert credentials.credentials_path().is_file()
+    assert not (worktree / "paperstack").exists()
+
+
 def test_cli_set_status_and_unset_never_print_value(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
