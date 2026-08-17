@@ -44,6 +44,20 @@ def test_content_flags_are_scoped(monkeypatch, capsys):
     assert "--sync" not in output
 
 
+def test_arxiv_replacement_commands_are_discoverable(monkeypatch, capsys):
+    paper = _help(monkeypatch, capsys, "paper")
+    search = _help(monkeypatch, capsys, "paper", "search")
+    watch = _help(monkeypatch, capsys, "paper", "watch")
+
+    assert "bibtex" in paper
+    assert "cache" in paper
+    assert "watch" in paper
+    assert "--category" in search
+    assert "--date-from" in search
+    assert "--limit" in search
+    assert "{add,list,remove,check}" in watch
+
+
 def test_review_sync_has_no_contradictory_offline_flag(monkeypatch, capsys):
     output = _help(monkeypatch, capsys, "review", "sync")
 

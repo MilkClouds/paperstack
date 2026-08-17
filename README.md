@@ -98,15 +98,40 @@ These commands use external source records and do not select a citation or make 
 
 ```bash
 paperstack paper search "Attention Is All You Need" --source dblp
+paperstack paper search 'ti:"robot learning" AND abs:policy' --source arxiv --category cs.RO --sort date
 paperstack paper metadata arxiv:2106.09685
 paperstack paper metadata doi:10.1109/CVPR.2016.90 --source crossref
 paperstack paper read arxiv:2604.23073 --outline
 paperstack paper read arxiv:2604.23073 --section 6
 paperstack paper pdf arxiv:2602.09017
+paperstack paper bibtex arxiv:1706.03762
+paperstack paper cache list
+paperstack paper watch add 'ti:"robot learning"' --category cs.RO
+paperstack paper watch check
 ```
 
 `metadata` accepts `arxiv:`, `doi:`, `dblp:`, and `openreview:` references. `read` and `pdf` require an `arxiv:`
 reference. Structured commands expose scoped `--json` flags; networked commands expose scoped `--offline` flags.
+
+### arxiv-mcp-server replacement
+
+Paperstack covers the base tools from
+[`blazickjp/arxiv-mcp-server`](https://github.com/blazickjp/arxiv-mcp-server) without starting an MCP process:
+
+| arxiv-mcp-server | Paperstack |
+|---|---|
+| `search_papers`, `get_abstract` | `paper search --source arxiv`, `paper metadata --source arxiv` |
+| `download_paper`, `read_paper` | `paper pdf`, `paper read --offline` |
+| `get_paper_latex`, section tools | `paper read`, `paper read --outline`, `paper read --section` |
+| `list_papers` | `paper cache list` |
+| `export_citations` | `paper bibtex` |
+| `watch_topic`, `check_alerts` | `paper watch add`, `paper watch check` |
+
+Search accepts raw arXiv syntax plus repeatable `--category`, `--date-from`, `--date-to`, `--limit`, and
+`--sort`. Topic watches live in `${XDG_CONFIG_HOME:-~/.config}/paperstack/arxiv-watches.json`; checking a watch
+advances its checkpoint only after a successful arXiv response. Semantic Scholar citation traversal is documented
+separately from the arXiv-native workflow. The upstream `[pro]` local embedding index is not replicated; use a
+dedicated vector index when local semantic search over downloaded papers is required.
 
 ## Build a viewer
 

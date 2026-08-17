@@ -875,13 +875,64 @@ def _paper_cache() -> Path:
 def _run_paper(a: argparse.Namespace) -> int:
     from . import credentials, metadata
 
+    offline = getattr(a, "offline", False)
+    if a.paper_cmd == "cache":
+        from . import arxiv
+
+        records = arxiv.cached_papers(_paper_cache())
+        if a.json:
+            print(json.dumps(records, indent=2))
+        else:
+            for record in records:
+                kinds = ",".join(name for name in ("source", "pdf") if record[name])
+                print(f"arxiv:{record['id']}  {kinds}")
+            print(f"{len(records)} cached papers", file=sys.stderr)
+        return 0
+    if a.paper_cmd == "watch":
+        from . import arxiv
+
+        try:
+            if a.watch_cmd == "add":
+                result = arxiv.add_watch(a.topic, categories=a.categories, limit=a.limit)
+            elif a.watch_cmd == "list":
+                result = arxiv.load_watches()
+            elif a.watch_cmd == "remove":
+                removed = arxiv.remove_watch(a.topic)
+                result = {"topic": a.topic, "removed": removed}
+            elif a.watch_cmd == "check":
+                result = arxiv.check_watches(a.topic)
+            else:
+                raise AssertionError(a.watch_cmd)
+        except (OSError, RuntimeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            die(f"arXiv watch operation failed: {exc}")
+        if a.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(json.dumps(result, indent=2))
+        return 0
+    if a.paper_cmd == "bibtex":
+        from . import arxiv
+
+        ids = []
+        try:
+            for raw in a.paper_refs:
+                parsed = metadata.PaperRef.parse(raw)
+                if parsed.kind != "arxiv":
+                    raise ValueError("paper bibtex currently requires arxiv: references")
+                ids.append(parsed.value)
+            result = arxiv.export_bibtex(ids)
+        except (OSError, ValueError) as exc:
+            die(f"arXiv citation export failed: {exc}")
+        print(json.dumps(result, indent=2) if a.json else result["bibtex"])
+        return 0
+
     ref = None
     if a.paper_cmd == "metadata":
         try:
             ref = metadata.PaperRef.parse(a.paper_ref)
         except ValueError as exc:
             die(str(exc))
-    if a.offline and a.paper_cmd in ("metadata", "search"):
+    if offline and a.paper_cmd in ("metadata", "search"):
         from . import dblp_index
 
         local_search = a.paper_cmd == "search" and a.source == "dblp"
@@ -893,7 +944,7 @@ def _run_paper(a: argparse.Namespace) -> int:
     if a.paper_cmd == "metadata":
         enabled = None if a.source == "all" else {a.source}
         try:
-            results = metadata.fetch_all(ref, enabled, local_only=a.offline)
+            results = metadata.fetch_all(ref, enabled, local_only=offline)
         except credentials.CredentialsError as exc:
             die(f"configuration failed: {exc}")
         except RuntimeError as exc:
@@ -902,11 +953,29 @@ def _run_paper(a: argparse.Namespace) -> int:
         return 0 if any(item["status"] == "ok" for item in results) else 1
     if a.paper_cmd == "search":
         try:
-            result = metadata.search(a.source, a.query, local_only=a.offline)
+            if a.source == "arxiv":
+                from . import arxiv
+
+                result = arxiv.search(
+                    a.query,
+                    categories=a.categories,
+                    date_from=a.date_from,
+                    date_to=a.date_to,
+                    limit=a.limit,
+                    sort=a.sort,
+                )
+            else:
+                if a.categories or a.date_from or a.date_to or a.limit != 10 or a.sort != "relevance":
+                    die("--category, --date-from, --date-to, --limit, and --sort currently require --source arxiv")
+                result = metadata.search(a.source, a.query, local_only=offline)
         except credentials.CredentialsError as exc:
             die(f"configuration failed: {exc}")
         except RuntimeError as exc:
-            die(f"DBLP index lookup failed: {exc}")
+            if a.source == "dblp":
+                die(f"DBLP index lookup failed: {exc}")
+            die(f"paper search failed: {exc}")
+        except ValueError as exc:
+            die(f"paper search failed: {exc}")
         metadata.print_results(result, json_output=a.json)
         return 0 if result["status"] == "ok" else 1
 
@@ -921,9 +990,9 @@ def _run_paper(a: argparse.Namespace) -> int:
 
         arxiv_source.CACHE_DIR = _paper_cache()
         cached_source = arxiv_source.CACHE_DIR / ref.value / "src"
-        if a.offline and a.refresh:
+        if offline and a.refresh:
             die("--offline and --refresh cannot be used together")
-        if a.offline and (not cached_source.is_dir() or not arxiv_source._tex_candidates(cached_source)):
+        if offline and (not cached_source.is_dir() or not arxiv_source._tex_candidates(cached_source)):
             die(f"no complete cached source for arxiv:{ref.value}")
         argv = ["read", ref.value]
         if a.outline:
@@ -940,7 +1009,7 @@ def _run_paper(a: argparse.Namespace) -> int:
 
         arxiv_pdf.CACHE_DIR = _paper_cache()
         cached_pdf = arxiv_pdf.CACHE_DIR / ref.value / "paper.md"
-        if a.offline and (not cached_pdf.is_file() or cached_pdf.stat().st_size <= 1000):
+        if offline and (not cached_pdf.is_file() or cached_pdf.stat().st_size <= 1000):
             die(f"no complete cached PDF conversion for arxiv:{ref.value}")
         if not arxiv_pdf.convert(ref.value):
             return 1
@@ -1097,6 +1166,11 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s = paper_sub.add_parser("search", help="search one metadata source")
     s.add_argument("query", help="paper title or other source-specific search text")
     s.add_argument("--source", choices=("s2", "dblp", "crossref", "openreview", "arxiv"), default="s2")
+    s.add_argument("--category", action="append", dest="categories", help="arXiv category; repeat to combine with OR")
+    s.add_argument("--date-from", help="earliest arXiv submission date (YYYY-MM-DD or ISO 8601)")
+    s.add_argument("--date-to", help="latest arXiv submission date (YYYY-MM-DD or ISO 8601)")
+    s.add_argument("--limit", type=int, default=10, help="maximum results (1-100)")
+    s.add_argument("--sort", choices=("relevance", "date"), default="relevance")
     _output(s)
     _offline(s)
     s = paper_sub.add_parser("read", help="read the LaTeX body, outline, or one section")
@@ -1111,6 +1185,26 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s = paper_sub.add_parser("pdf", help="download and convert a native PDF submission")
     s.add_argument("paper_ref", help="arxiv: reference")
     _offline(s)
+    s = paper_sub.add_parser("bibtex", help="export authoritative arXiv metadata as BibTeX")
+    s.add_argument("paper_refs", nargs="+", help="one or more arxiv: references")
+    _output(s)
+    s = paper_sub.add_parser("cache", help="inspect the local paper cache")
+    cache_sub = s.add_subparsers(dest="cache_cmd", required=True)
+    _output(cache_sub.add_parser("list", help="list cached arXiv sources and PDF conversions"))
+    s = paper_sub.add_parser("watch", help="manage persistent arXiv topic watches")
+    watch_sub = s.add_subparsers(dest="watch_cmd", required=True)
+    add = watch_sub.add_parser("add", help="save or update a topic watch")
+    add.add_argument("topic", help="raw arXiv query syntax")
+    add.add_argument("--category", action="append", dest="categories")
+    add.add_argument("--limit", type=int, default=10)
+    _output(add)
+    _output(watch_sub.add_parser("list", help="list topic watches"))
+    remove = watch_sub.add_parser("remove", help="remove a topic watch")
+    remove.add_argument("topic")
+    _output(remove)
+    check = watch_sub.add_parser("check", help="check one or all watches for new papers")
+    check.add_argument("topic", nargs="?")
+    _output(check)
 
     index = sub.add_parser("index", help="optional local lookup indexes")
     index_sub = index.add_subparsers(dest="index_cmd", required=True)

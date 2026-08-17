@@ -45,11 +45,18 @@ paperstack review search "flow matching"
 paperstack review show arxiv:2410.24164 --json
 paperstack review list --quality good --tag vla
 paperstack paper metadata arxiv:2106.09685
+paperstack paper search 'ti:"flow matching" AND abs:robot' --source arxiv --category cs.RO --sort date
 paperstack paper read arxiv:2106.09685 --outline
 paperstack paper read arxiv:2106.09685 --section 3
+paperstack paper bibtex arxiv:2106.09685
+paperstack paper cache list
 ```
 
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.
+
+Use raw arXiv query syntax with `paperstack paper search --source arxiv`; add category, date, limit, and sort flags
+instead of routing through an arXiv MCP server. Use `paperstack paper watch add|list|remove|check` for persistent topic
+watches. Use `paperstack paper read --offline` and `paperstack paper cache list` for local-only paper access.
 
 ## Author entries
 
