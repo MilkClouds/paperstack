@@ -16,6 +16,17 @@ Use `paperstack` as the interface to independently authored research corpora and
 
 Never remove a profile, purge a remote cache, overwrite an entry, or fetch citation updates without explicit user intent.
 
+Manage optional provider credentials without exposing their values:
+
+```bash
+paperstack config status
+paperstack config set semantic-scholar.api-key
+paperstack config unset semantic-scholar.api-key
+```
+
+`set` prompts securely; use `--stdin` only when piping from a trusted secret manager. Exported environment variables
+and the nearest `.env` take priority over the user credential store.
+
 ## Route the task
 
 - Use `paperstack review ...` for authored entries and editorial judgments.

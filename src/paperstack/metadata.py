@@ -12,6 +12,8 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
+from . import credentials
+
 ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 SOURCES = ("semantic_scholar", "dblp", "crossref", "openreview", "acl_anthology", "arxiv")
 SEARCH_SOURCES = ("s2", "dblp", "crossref", "openreview", "arxiv")
@@ -133,9 +135,8 @@ def resolve_s2(ref: PaperRef) -> dict:
     value = f"https://openreview.net/forum?id={ref.value}" if ref.kind == "openreview" else ref.value
     ident = urllib.parse.quote(f"{prefix}:{value}", safe="")
     url = f"https://api.semanticscholar.org/graph/v1/paper/{ident}"
-    headers = (
-        {"x-api-key": os.environ["SEMANTIC_SCHOLAR_API_KEY"]} if os.environ.get("SEMANTIC_SCHOLAR_API_KEY") else {}
-    )
+    api_key = credentials.get(credentials.SEMANTIC_SCHOLAR_API_KEY)
+    headers = {"x-api-key": api_key} if api_key else {}
     params = {"fields": S2_FIELDS}
     return _safe(lambda: _result("semantic_scholar", url, _get_json(url, params, headers)), "semantic_scholar", url)
 
@@ -365,9 +366,8 @@ def search(source: str, query: str, *, local_only: bool = False) -> dict:
         )
     if source == "s2":
         url = "https://api.semanticscholar.org/graph/v1/paper/search"
-        headers = (
-            {"x-api-key": os.environ["SEMANTIC_SCHOLAR_API_KEY"]} if os.environ.get("SEMANTIC_SCHOLAR_API_KEY") else {}
-        )
+        api_key = credentials.get(credentials.SEMANTIC_SCHOLAR_API_KEY)
+        headers = {"x-api-key": api_key} if api_key else {}
         params = {"query": query, "limit": 10, "fields": S2_FIELDS}
         return _safe(
             lambda: _result("semantic_scholar", url, _get_json(url, params, headers)), "semantic_scholar", url
