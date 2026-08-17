@@ -873,7 +873,7 @@ def _paper_cache() -> Path:
 
 
 def _run_paper(a: argparse.Namespace) -> int:
-    from . import metadata
+    from . import credentials, metadata
 
     ref = None
     if a.paper_cmd == "metadata":
@@ -894,6 +894,8 @@ def _run_paper(a: argparse.Namespace) -> int:
         enabled = None if a.source == "all" else {a.source}
         try:
             results = metadata.fetch_all(ref, enabled, local_only=a.offline)
+        except credentials.CredentialsError as exc:
+            die(f"configuration failed: {exc}")
         except RuntimeError as exc:
             die(f"DBLP index lookup failed: {exc}")
         metadata.print_results(results, json_output=a.json)
@@ -901,6 +903,8 @@ def _run_paper(a: argparse.Namespace) -> int:
     if a.paper_cmd == "search":
         try:
             result = metadata.search(a.source, a.query, local_only=a.offline)
+        except credentials.CredentialsError as exc:
+            die(f"configuration failed: {exc}")
         except RuntimeError as exc:
             die(f"DBLP index lookup failed: {exc}")
         metadata.print_results(result, json_output=a.json)

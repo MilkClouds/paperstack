@@ -86,6 +86,40 @@ def test_invalid_store_and_multiline_values_are_rejected(tmp_path, monkeypatch):
         credentials.set_value(credentials.SEMANTIC_SCHOLAR_API_KEY, "two\nlines")
 
 
+def test_non_utf8_store_is_rejected_without_traceback(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    path = credentials.credentials_path()
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"\xff")
+
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, "config", "status")
+
+    assert exc.value.code == 3
+    error = capsys.readouterr().err
+    assert "configuration failed" in error
+    assert "Traceback" not in error
+
+
+@pytest.mark.parametrize(
+    "arguments", [("paper", "search", "test", "--source", "s2"), ("paper", "metadata", "arxiv:2401.00001")]
+)
+def test_paper_commands_handle_invalid_store(tmp_path, monkeypatch, capsys, arguments):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    path = credentials.credentials_path()
+    path.parent.mkdir(parents=True)
+    path.write_text("not json")
+
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, *arguments)
+
+    assert exc.value.code == 3
+    error = capsys.readouterr().err
+    assert "configuration failed" in error
+    assert "Traceback" not in error
+
+
 def test_dotenv_source_and_permissions_are_reported(tmp_path, monkeypatch):
     dotenv = tmp_path / ".env"
     dotenv.write_text("SEMANTIC_SCHOLAR_API_KEY=dotenv-key\n")

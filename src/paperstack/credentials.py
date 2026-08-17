@@ -49,7 +49,7 @@ def _load() -> dict:
         return _empty()
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise CredentialsError(f"credential store is unreadable: {path}") from exc
     if not isinstance(document, dict) or document.get("version") != 1:
         raise CredentialsError(f"credential store has an unsupported format: {path}")
