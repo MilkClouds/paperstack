@@ -44,6 +44,19 @@ def test_content_flags_are_scoped(monkeypatch, capsys):
     assert "--sync" not in output
 
 
+def test_paper_interface_is_flat_and_source_oriented(monkeypatch, capsys):
+    paper = _help(monkeypatch, capsys, "paper")
+    search = _help(monkeypatch, capsys, "paper", "search")
+
+    for command in ("metadata", "search", "authors", "citations", "references", "read", "pdf"):
+        assert command in paper
+    for removed in ("bibtex", "watch", "cache"):
+        assert removed not in paper
+    assert "semantic-scholar" in search
+    assert "--category" in search
+    assert "--year" in search
+
+
 def test_review_sync_has_no_contradictory_offline_flag(monkeypatch, capsys):
     output = _help(monkeypatch, capsys, "review", "sync")
 

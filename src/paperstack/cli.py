@@ -875,13 +875,36 @@ def _paper_cache() -> Path:
 def _run_paper(a: argparse.Namespace) -> int:
     from . import credentials, metadata
 
+    offline = getattr(a, "offline", False)
+    if a.paper_cmd in ("authors", "citations", "references"):
+        if offline:
+            die(f"paper {a.paper_cmd} requires network access")
+        from . import semantic_scholar
+
+        try:
+            if a.paper_cmd == "authors":
+                result = semantic_scholar.authors(a.paper_ref, limit=a.limit, offset=a.offset)
+            else:
+                result = semantic_scholar.graph(
+                    a.paper_ref,
+                    a.paper_cmd,
+                    limit=a.limit,
+                    offset=a.offset,
+                )
+        except credentials.CredentialsError as exc:
+            die(f"configuration failed: {exc}")
+        except ValueError as exc:
+            die(f"Semantic Scholar lookup failed: {exc}")
+        metadata.print_results(result, json_output=a.json)
+        return 0 if result["status"] == "ok" else 1
+
     ref = None
     if a.paper_cmd == "metadata":
         try:
             ref = metadata.PaperRef.parse(a.paper_ref)
         except ValueError as exc:
             die(str(exc))
-    if a.offline and a.paper_cmd in ("metadata", "search"):
+    if offline and a.paper_cmd in ("metadata", "search"):
         from . import dblp_index
 
         local_search = a.paper_cmd == "search" and a.source == "dblp"
@@ -891,9 +914,10 @@ def _run_paper(a: argparse.Namespace) -> int:
         if not dblp_index.installed() or not (local_search or local_metadata):
             die("offline paper lookup is available only through an installed DBLP index")
     if a.paper_cmd == "metadata":
-        enabled = None if a.source == "all" else {a.source}
+        source = a.source.replace("-", "_")
+        enabled = None if source == "all" else {source}
         try:
-            results = metadata.fetch_all(ref, enabled, local_only=a.offline)
+            results = metadata.fetch_all(ref, enabled, local_only=offline)
         except credentials.CredentialsError as exc:
             die(f"configuration failed: {exc}")
         except RuntimeError as exc:
@@ -902,11 +926,52 @@ def _run_paper(a: argparse.Namespace) -> int:
         return 0 if any(item["status"] == "ok" for item in results) else 1
     if a.paper_cmd == "search":
         try:
-            result = metadata.search(a.source, a.query, local_only=a.offline)
+            if a.source == "arxiv":
+                from . import arxiv
+
+                if a.year or a.fields_of_study or a.open_access or a.offset:
+                    die("--year, --field-of-study, --open-access, and --offset require --source semantic-scholar")
+                result = arxiv.search(
+                    a.query,
+                    categories=a.categories,
+                    date_from=a.date_from,
+                    date_to=a.date_to,
+                    limit=a.limit,
+                    sort=a.sort,
+                )
+            elif a.source == "semantic-scholar":
+                from . import semantic_scholar
+
+                if a.categories or a.date_from or a.date_to or a.sort != "relevance":
+                    die("--category, --date-from, --date-to, and --sort require --source arxiv")
+                result = semantic_scholar.search(
+                    a.query,
+                    limit=a.limit,
+                    offset=a.offset,
+                    year=a.year,
+                    fields_of_study=a.fields_of_study,
+                    open_access=a.open_access,
+                )
+            else:
+                if (
+                    a.categories
+                    or a.date_from
+                    or a.date_to
+                    or a.limit != 10
+                    or a.offset
+                    or a.sort != "relevance"
+                    or a.year
+                    or a.fields_of_study
+                    or a.open_access
+                ):
+                    die("search filters require --source arxiv or --source semantic-scholar")
+                result = metadata.search(a.source, a.query, local_only=offline)
         except credentials.CredentialsError as exc:
             die(f"configuration failed: {exc}")
         except RuntimeError as exc:
             die(f"DBLP index lookup failed: {exc}")
+        except ValueError as exc:
+            die(f"paper search failed: {exc}")
         metadata.print_results(result, json_output=a.json)
         return 0 if result["status"] == "ok" else 1
 
@@ -921,9 +986,9 @@ def _run_paper(a: argparse.Namespace) -> int:
 
         arxiv_source.CACHE_DIR = _paper_cache()
         cached_source = arxiv_source.CACHE_DIR / ref.value / "src"
-        if a.offline and a.refresh:
+        if offline and a.refresh:
             die("--offline and --refresh cannot be used together")
-        if a.offline and (not cached_source.is_dir() or not arxiv_source._tex_candidates(cached_source)):
+        if offline and (not cached_source.is_dir() or not arxiv_source._tex_candidates(cached_source)):
             die(f"no complete cached source for arxiv:{ref.value}")
         argv = ["read", ref.value]
         if a.outline:
@@ -940,7 +1005,7 @@ def _run_paper(a: argparse.Namespace) -> int:
 
         arxiv_pdf.CACHE_DIR = _paper_cache()
         cached_pdf = arxiv_pdf.CACHE_DIR / ref.value / "paper.md"
-        if a.offline and (not cached_pdf.is_file() or cached_pdf.stat().st_size <= 1000):
+        if offline and (not cached_pdf.is_file() or cached_pdf.stat().st_size <= 1000):
             die(f"no complete cached PDF conversion for arxiv:{ref.value}")
         if not arxiv_pdf.convert(ref.value):
             return 1
@@ -1089,16 +1154,36 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s.add_argument("paper_ref", help="arxiv:, doi:, dblp:, or openreview: reference")
     s.add_argument(
         "--source",
-        choices=("all", "semantic_scholar", "dblp", "crossref", "openreview", "acl_anthology", "arxiv"),
+        choices=("all", "semantic-scholar", "dblp", "crossref", "openreview", "acl-anthology", "arxiv"),
         default="all",
     )
     _output(s)
     _offline(s)
     s = paper_sub.add_parser("search", help="search one metadata source")
     s.add_argument("query", help="paper title or other source-specific search text")
-    s.add_argument("--source", choices=("s2", "dblp", "crossref", "openreview", "arxiv"), default="s2")
+    s.add_argument(
+        "--source",
+        choices=("semantic-scholar", "dblp", "crossref", "openreview", "arxiv"),
+        default="semantic-scholar",
+    )
+    s.add_argument("--limit", type=int, default=10, help="maximum results")
+    s.add_argument("--offset", type=int, default=0, help="Semantic Scholar result offset")
+    s.add_argument("--year", help="Semantic Scholar year or year range")
+    s.add_argument("--field-of-study", action="append", dest="fields_of_study")
+    s.add_argument("--open-access", action="store_true", help="require an open-access PDF")
+    s.add_argument("--category", action="append", dest="categories", help="arXiv category; repeat to combine")
+    s.add_argument("--date-from", help="earliest arXiv submission date")
+    s.add_argument("--date-to", help="latest arXiv submission date")
+    s.add_argument("--sort", choices=("relevance", "date"), default="relevance")
     _output(s)
     _offline(s)
+    for command in ("authors", "citations", "references"):
+        s = paper_sub.add_parser(command, help=f"inspect Semantic Scholar {command}")
+        s.add_argument("paper_ref", help="arxiv:, doi:, s2:, corpus:, acl:, pmid:, or mag: reference")
+        s.add_argument("--limit", type=int, default=100)
+        s.add_argument("--offset", type=int, default=0)
+        _output(s)
+        _offline(s)
     s = paper_sub.add_parser("read", help="read the LaTeX body, outline, or one section")
     s.add_argument("paper_ref", help="arxiv: reference")
     mode = s.add_mutually_exclusive_group()

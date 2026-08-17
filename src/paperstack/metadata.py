@@ -17,7 +17,10 @@ from . import credentials
 ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 SOURCES = ("semantic_scholar", "dblp", "crossref", "openreview", "acl_anthology", "arxiv")
 SEARCH_SOURCES = ("s2", "dblp", "crossref", "openreview", "arxiv")
-S2_FIELDS = "paperId,externalIds,venue,title,year,authors,citationCount,influentialCitationCount,referenceCount"
+S2_FIELDS = (
+    "paperId,externalIds,title,abstract,venue,year,authors,citationCount,influentialCitationCount,referenceCount,"
+    "publicationDate,publicationTypes,fieldsOfStudy,s2FieldsOfStudy,journal,openAccessPdf"
+)
 
 
 @dataclass(frozen=True)

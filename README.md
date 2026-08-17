@@ -98,15 +98,22 @@ These commands use external source records and do not select a citation or make 
 
 ```bash
 paperstack paper search "Attention Is All You Need" --source dblp
+paperstack paper search "robot learning" --source semantic-scholar --year 2024-2026
+paperstack paper search 'ti:"robot learning"' --source arxiv --category cs.RO --sort date
 paperstack paper metadata arxiv:2106.09685
 paperstack paper metadata doi:10.1109/CVPR.2016.90 --source crossref
+paperstack paper citations arxiv:2106.09685 --limit 50
+paperstack paper references doi:10.48550/arXiv.2106.09685 --limit 50
 paperstack paper read arxiv:2604.23073 --outline
 paperstack paper read arxiv:2604.23073 --section 6
 paperstack paper pdf arxiv:2602.09017
 ```
 
 `metadata` accepts `arxiv:`, `doi:`, `dblp:`, and `openreview:` references. `read` and `pdf` require an `arxiv:`
-reference. Structured commands expose scoped `--json` flags; networked commands expose scoped `--offline` flags.
+reference. `authors`, `citations`, and `references` use Semantic Scholar and also accept its `s2:`, `corpus:`, `acl:`,
+`pmid:`, and `mag:` identifiers. Structured commands expose scoped `--json` flags; networked commands expose scoped
+`--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
+of a work should be cited.
 
 ## Build a viewer
 
