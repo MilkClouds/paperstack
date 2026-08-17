@@ -45,7 +45,7 @@ def test_registry_add_use_list_and_remove(tmp_path, monkeypatch):
 
 def test_empty_xdg_config_home_uses_home_default(tmp_path, monkeypatch):
     home = tmp_path / "home"
-    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(corpora.Path, "home", classmethod(lambda cls: home))
     monkeypatch.setenv("XDG_CONFIG_HOME", "")
 
     assert corpora.config_path() == home / ".config" / "paperstack" / "config.json"

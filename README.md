@@ -71,9 +71,9 @@ paperstack config unset semantic-scholar.api-key
 ```
 
 `set` prompts without echoing the value; use `--stdin` to pipe it from a password manager. Credentials are written
-atomically to `${XDG_CONFIG_HOME:-~/.config}/paperstack/credentials.json` with mode `0600`. Exported environment
-variables take priority, followed by the nearest `.env`, then the credential store. GitHub Actions can therefore keep
-using repository secrets through environment variables.
+atomically to `${XDG_CONFIG_HOME:-~/.config}/paperstack/credentials.json`, with mode `0600` on POSIX systems.
+Exported environment variables take priority, followed by the nearest `.env`, then the credential store. GitHub
+Actions can therefore keep using repository secrets through environment variables.
 
 ## Review corpus
 

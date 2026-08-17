@@ -135,6 +135,8 @@ def source(name: str) -> str | None:
 
 def warnings() -> list[str]:
     messages = []
+    if os.name != "posix":
+        return messages
     if _DOTENV_PATH and _DOTENV_PATH.is_file():
         mode = stat.S_IMODE(_DOTENV_PATH.stat().st_mode)
         if mode & 0o077:

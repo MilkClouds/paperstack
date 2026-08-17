@@ -23,8 +23,9 @@ def test_store_is_private_and_environment_takes_priority(tmp_path, monkeypatch):
 
     path = credentials.credentials_path()
     assert credentials.get(credentials.SEMANTIC_SCHOLAR_API_KEY) == "stored-key"
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     assert json.loads(path.read_text())["providers"]["semantic_scholar"]["api_key"] == "stored-key"
 
     monkeypatch.setenv("SEMANTIC_SCHOLAR_API_KEY", "environment-key")
@@ -35,7 +36,7 @@ def test_empty_xdg_config_home_uses_home_default(tmp_path, monkeypatch):
     home = tmp_path / "home"
     worktree = tmp_path / "worktree"
     worktree.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(credentials.Path, "home", classmethod(lambda cls: home))
     monkeypatch.setenv("XDG_CONFIG_HOME", "")
     monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
     monkeypatch.chdir(worktree)
@@ -120,6 +121,7 @@ def test_paper_commands_handle_invalid_store(tmp_path, monkeypatch, capsys, argu
     assert "Traceback" not in error
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits are not portable to Windows")
 def test_dotenv_source_and_permissions_are_reported(tmp_path, monkeypatch):
     dotenv = tmp_path / ".env"
     dotenv.write_text("SEMANTIC_SCHOLAR_API_KEY=dotenv-key\n")
