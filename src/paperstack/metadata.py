@@ -69,7 +69,16 @@ def request(
                 return response.read()
         except urllib.error.HTTPError as exc:
             _last_request[host] = time.monotonic()
-            if exc.code != 429 or attempt == 2:
+            if exc.code != 429:
+                raise
+            if attempt == 2:
+                has_api_key = any(name.lower() == "x-api-key" for name in request_headers)
+                if host == "api.semanticscholar.org" and not has_api_key:
+                    message = (
+                        f"{exc.reason}; configure semantic-scholar.api-key with "
+                        "`paperstack config set semantic-scholar.api-key` for more reliable access"
+                    )
+                    raise urllib.error.HTTPError(exc.url, exc.code, message, exc.headers, exc.fp) from exc
                 raise
             time.sleep(5 * (attempt + 1))
     raise RuntimeError("unreachable request retry state")
