@@ -137,6 +137,31 @@ def test_request_retries_rate_limits(monkeypatch):
     assert len(attempts) == 3
 
 
+def test_unauthenticated_s2_rate_limit_suggests_configured_key(monkeypatch):
+    def rate_limited(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 429, "rate limited", {}, None)
+
+    monkeypatch.setattr(metadata.urllib.request, "urlopen", rate_limited)
+    monkeypatch.setattr(metadata.time, "sleep", lambda seconds: None)
+
+    with pytest.raises(urllib.error.HTTPError, match="paperstack config set semantic-scholar.api-key"):
+        metadata.request("https://api.semanticscholar.org/graph/v1/paper/test")
+
+
+def test_authenticated_s2_rate_limit_does_not_suggest_configured_key(monkeypatch):
+    def rate_limited(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 429, "rate limited", {}, None)
+
+    monkeypatch.setattr(metadata.urllib.request, "urlopen", rate_limited)
+    monkeypatch.setattr(metadata.time, "sleep", lambda seconds: None)
+
+    with pytest.raises(urllib.error.HTTPError, match="^HTTP Error 429: rate limited$"):
+        metadata.request(
+            "https://api.semanticscholar.org/graph/v1/paper/test",
+            headers={"x-api-key": "configured"},
+        )
+
+
 def test_openreview_falls_back_to_v1(monkeypatch):
     monkeypatch.setattr(metadata, "_post_json", lambda *args, **kwargs: {"notes": []})
 
