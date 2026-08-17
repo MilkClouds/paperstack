@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import urllib.parse
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import metadata
+from . import credentials, metadata
 
 S2_BATCH_API = "https://api.semanticscholar.org/graph/v1/paper/batch"
 BATCH_SIZE = 500
@@ -44,7 +43,7 @@ def fetch(arxiv_ids: list[str]) -> dict[str, int]:
     """Fetch citation counts in aligned Semantic Scholar batches."""
     counts: dict[str, int] = {}
     headers = {"Content-Type": "application/json"}
-    if api_key := os.environ.get("SEMANTIC_SCHOLAR_API_KEY"):
+    if api_key := credentials.get(credentials.SEMANTIC_SCHOLAR_API_KEY):
         headers["x-api-key"] = api_key
 
     for start in range(0, len(arxiv_ids), BATCH_SIZE):

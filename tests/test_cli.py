@@ -14,11 +14,11 @@ def _help(monkeypatch, capsys, *args):
     return capsys.readouterr().out
 
 
-def test_top_level_exposes_only_data_boundaries(monkeypatch, capsys):
+def test_top_level_exposes_only_command_groups(monkeypatch, capsys):
     output = _help(monkeypatch, capsys)
 
-    assert "{corpus,viewer,review,paper,index}" in output
-    assert "{corpus,viewer,review,paper,index,show" not in output
+    assert "{corpus,config,viewer,review,paper,index}" in output
+    assert "{corpus,config,viewer,review,paper,index,show" not in output
     assert "paperstack corpus add" in output
     assert "Use `corpus` to select authored data" in output
 
