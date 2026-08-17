@@ -103,7 +103,8 @@ def test_non_utf8_store_is_rejected_without_traceback(tmp_path, monkeypatch, cap
 
 
 @pytest.mark.parametrize(
-    "arguments", [("paper", "search", "test", "--source", "s2"), ("paper", "metadata", "arxiv:2401.00001")]
+    "arguments",
+    [("paper", "search", "test", "--source", "semantic-scholar"), ("paper", "metadata", "arxiv:2401.00001")],
 )
 def test_paper_commands_handle_invalid_store(tmp_path, monkeypatch, capsys, arguments):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))

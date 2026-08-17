@@ -45,11 +45,18 @@ paperstack review search "flow matching"
 paperstack review show arxiv:2410.24164 --json
 paperstack review list --quality good --tag vla
 paperstack paper metadata arxiv:2106.09685
+paperstack paper search "flow matching robotics" --source semantic-scholar --year 2024-2026
+paperstack paper search 'ti:"flow matching"' --source arxiv --category cs.RO --sort date
+paperstack paper citations arxiv:2106.09685 --limit 50
+paperstack paper references arxiv:2106.09685 --limit 50
 paperstack paper read arxiv:2106.09685 --outline
 paperstack paper read arxiv:2106.09685 --section 3
 ```
 
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.
+
+Treat paper metadata and citation graphs as source records, not as a selected citation. Do not synthesize BibTeX or
+choose a citable version from those records without checking the publication venue and the primary source.
 
 ## Author entries
 
