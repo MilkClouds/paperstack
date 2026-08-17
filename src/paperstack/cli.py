@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import getpass
 import io
 import json
 import os
@@ -558,6 +559,53 @@ def _corpus_commands(sub) -> None:
     s.add_argument("--yes", action="store_true")
 
 
+def _config_commands(sub) -> None:
+    from . import credentials
+
+    s = sub.add_parser("set", help="store a provider credential")
+    s.add_argument("name", choices=credentials.names())
+    s.add_argument("--stdin", action="store_true", help="read the credential from standard input")
+
+    s = sub.add_parser("unset", help="remove a stored provider credential")
+    s.add_argument("name", choices=credentials.names())
+
+    sub.add_parser("status", help="show credential sources without revealing values")
+    sub.add_parser("paths", help="show configuration file locations")
+
+
+def _run_config(a: argparse.Namespace) -> int:
+    from . import corpora, credentials
+
+    try:
+        if a.config_cmd == "set":
+            value = sys.stdin.read() if a.stdin else getpass.getpass(f"{a.name}: ")
+            credentials.set_value(a.name, value)
+            print(f"stored {a.name} in {credentials.credentials_path()}")
+            if credentials.source(a.name) != "credentials file":
+                warn(f"{a.name} is currently overridden by {credentials.source(a.name)}")
+            return 0
+        if a.config_cmd == "unset":
+            if credentials.unset(a.name):
+                print(f"removed stored {a.name}")
+            else:
+                print(f"{a.name} was not stored")
+            return 0
+        if a.config_cmd == "status":
+            for name in credentials.names():
+                source = credentials.source(name)
+                print(f"{name:<32} {'configured' if source else 'not configured':<14} {source or '-'}")
+            for message in credentials.warnings():
+                warn(message)
+            return 0
+        if a.config_cmd == "paths":
+            print(f"config: {corpora.config_path()}")
+            print(f"credentials: {credentials.credentials_path()}")
+            return 0
+        raise AssertionError(a.config_cmd)
+    except (OSError, credentials.CredentialsError) as exc:
+        die(f"configuration failed: {exc}")
+
+
 def _run_corpus(a: argparse.Namespace) -> int:
     from . import corpora
 
@@ -988,6 +1036,10 @@ Run `paperstack <group> --help` for group-specific examples.""",
     corpus_sub = corpus.add_subparsers(dest="corpus_cmd", required=True)
     _corpus_commands(corpus_sub)
 
+    config = sub.add_parser("config", help="manage local settings and provider credentials")
+    config_sub = config.add_subparsers(dest="config_cmd", required=True)
+    _config_commands(config_sub)
+
     viewer = sub.add_parser("viewer", help="build or serve the static corpus viewer")
     viewer_sub = viewer.add_subparsers(dest="viewer_cmd", required=True)
     s = viewer_sub.add_parser("build", help="build static files from the selected corpus")
@@ -1083,6 +1135,8 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
 
     if a.cmd == "corpus":
         return _run_corpus(a)
+    if a.cmd == "config":
+        return _run_config(a)
     if a.cmd == "viewer":
         return _run_viewer(a)
     if a.cmd == "paper":

@@ -26,6 +26,22 @@ def test_fetch_uses_aligned_batch_response(monkeypatch):
     assert requests[0][2] == {"ids": ["ARXIV:2401.00001", "ARXIV:2401.00002"]}
 
 
+def test_fetch_uses_stored_api_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
+    citations.credentials.set_value(citations.credentials.SEMANTIC_SCHOLAR_API_KEY, "stored-key")
+    requests = []
+    monkeypatch.setattr(
+        citations.metadata,
+        "request",
+        lambda url, headers=None, data=None: requests.append(headers) or b'[{"citationCount":1}]',
+    )
+
+    citations.fetch(["2401.00001"])
+
+    assert requests == [{"Content-Type": "application/json", "x-api-key": "stored-key"}]
+
+
 def test_fetch_rejects_error_document(monkeypatch):
     monkeypatch.setattr(citations.metadata, "request", lambda *args, **kwargs: b'{"error":"bad IDs"}')
 

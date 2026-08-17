@@ -61,6 +61,20 @@ paperstack review sync
 then a surrounding corpus working tree, then the active profile. Profiles are stored in
 `${XDG_CONFIG_HOME:-~/.config}/paperstack/config.json`.
 
+Provider credentials can be stored once without adding them to a project `.env`:
+
+```bash
+paperstack config set semantic-scholar.api-key
+paperstack config status
+paperstack config paths
+paperstack config unset semantic-scholar.api-key
+```
+
+`set` prompts without echoing the value; use `--stdin` to pipe it from a password manager. Credentials are written
+atomically to `${XDG_CONFIG_HOME:-~/.config}/paperstack/credentials.json` with mode `0600`. Exported environment
+variables take priority, followed by the nearest `.env`, then the credential store. GitHub Actions can therefore keep
+using repository secrets through environment variables.
+
 ## Review corpus
 
 ```bash
@@ -127,7 +141,7 @@ pointer switch. See
 | `PAPERSTACK_PAPERS_DIR` | arXiv source and PDF cache |
 | `SEMANTIC_SCHOLAR_API_KEY` | Optional higher-rate Semantic Scholar access |
 | `OPENREVIEW_ACCESS_TOKEN` | Optional OpenReview access cookie value |
-| `XDG_CONFIG_HOME` | Corpus profile configuration root |
+| `XDG_CONFIG_HOME` | Corpus profile and credential configuration root |
 | `XDG_CACHE_HOME` | Remote corpus and paper cache root |
 | `XDG_DATA_HOME` | DBLP index root |
 
