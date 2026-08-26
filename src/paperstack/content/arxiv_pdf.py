@@ -10,6 +10,7 @@ import importlib.metadata
 import json
 import os
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -153,9 +154,16 @@ def _download_pdf(url: str, pdf_path: Path) -> bool:
     if not raw.startswith(b"%PDF"):
         print(f"{url} did not return a PDF", file=sys.stderr)
         return False
-    staged = pdf_path.with_suffix(".pdf.part")
-    staged.write_bytes(raw)
-    staged.replace(pdf_path)
+    descriptor, staged = tempfile.mkstemp(prefix=f".{pdf_path.name}-", suffix=".part", dir=pdf_path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(raw)
+        os.replace(staged, pdf_path)
+    finally:
+        try:
+            os.unlink(staged)
+        except FileNotFoundError:
+            pass
     return True
 
 

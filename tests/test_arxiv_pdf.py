@@ -188,6 +188,23 @@ def test_corrupt_cached_pdf_is_refetched_once(tmp_path, monkeypatch):
     assert (paper_dir / "paper.md").read_text() == "repaired" * 25
 
 
+def test_pdf_downloads_use_unique_staging_files(tmp_path, monkeypatch):
+    staged = []
+    replace = arxiv_pdf.os.replace
+
+    def record_replace(source, target):
+        staged.append(source)
+        replace(source, target)
+
+    monkeypatch.setattr(arxiv_pdf, "_fetch", lambda _url: b"%PDF-test")
+    monkeypatch.setattr(arxiv_pdf.os, "replace", record_replace)
+    target = tmp_path / "paper.pdf"
+
+    assert arxiv_pdf._download_pdf("https://example.test/paper.pdf", target) is True
+    assert arxiv_pdf._download_pdf("https://example.test/paper.pdf", target) is True
+    assert len(set(staged)) == 2
+
+
 def test_unusable_cached_pdf_output_is_refetched_once(tmp_path, monkeypatch):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
