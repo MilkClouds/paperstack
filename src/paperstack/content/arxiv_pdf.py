@@ -52,6 +52,8 @@ def _cached_conversion(d: Path) -> Path | None:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
+    if not isinstance(meta, dict):
+        return None
     valid = (
         meta.get("converter") == CONVERTER
         and meta.get("bytes") == len(markdown)

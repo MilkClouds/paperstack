@@ -228,3 +228,12 @@ def test_current_converter_cache_rejects_mismatched_markdown(tmp_path):
     )
 
     assert arxiv_pdf._cached_conversion(paper_dir) is None
+
+
+def test_current_converter_cache_rejects_non_object_metadata(tmp_path):
+    paper_dir = tmp_path / "2601.00001"
+    paper_dir.mkdir()
+    (paper_dir / "paper.md").write_text("cached" * 20)
+    (paper_dir / "meta.json").write_text("null")
+
+    assert arxiv_pdf._cached_conversion(paper_dir) is None
