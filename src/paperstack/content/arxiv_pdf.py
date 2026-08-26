@@ -136,6 +136,20 @@ def _is_pdf(path: Path) -> bool:
         return False
 
 
+def _download_pdf(url: str, pdf_path: Path) -> bool:
+    raw = _fetch(url)
+    if raw is None:
+        print(f"could not fetch {url}", file=sys.stderr)
+        return False
+    if not raw.startswith(b"%PDF"):
+        print(f"{url} did not return a PDF", file=sys.stderr)
+        return False
+    staged = pdf_path.with_suffix(".pdf.part")
+    staged.write_bytes(raw)
+    staged.replace(pdf_path)
+    return True
+
+
 def convert(arxiv_id: str) -> bool:
     d = CACHE_DIR / arxiv_id
     cached = _cached_conversion(d)
@@ -156,32 +170,31 @@ def convert(arxiv_id: str) -> bool:
     url = f"https://arxiv.org/pdf/{arxiv_id}"
     d.mkdir(parents=True, exist_ok=True)
     pdf_path = d / "paper.pdf"
-    if not _is_pdf(pdf_path):
-        raw = _fetch(url)
-        if raw is None:
-            print(f"{arxiv_id}: could not fetch {url}", file=sys.stderr)
-            return False
-        if not raw.startswith(b"%PDF"):
-            print(f"{arxiv_id}: {url} did not return a PDF", file=sys.stderr)
-            return False
-        pdf_path.write_bytes(raw)
+    reused_cached_pdf = _is_pdf(pdf_path)
+    if not reused_cached_pdf and not _download_pdf(url, pdf_path):
+        return False
 
-    try:
-        result = pdf_inspector.process_pdf_with_ocr(str(pdf_path), mode="auto")
-        md = result.markdown
-        meta = _ocr_meta(arxiv_id, url, md, result)
-    except ValueError as error:
+    while True:
         try:
-            native = pdf_inspector.process_pdf_with_ocr(str(pdf_path), mode="off")
-        except ValueError:
-            native = None
-        if native is None or not _usable(native.markdown):
-            print(f"{arxiv_id}: PDF conversion failed: {error}", file=sys.stderr)
-            print(f"OCR runtime setup: {OCR_RUNTIME_GUIDE}", file=sys.stderr)
-            return False
-        md = native.markdown
-        meta = _native_fallback_meta(arxiv_id, url, md, native, error)
-        print(f"{arxiv_id}: OCR unavailable; cached {meta['quality']} native extraction", file=sys.stderr)
+            result = pdf_inspector.process_pdf_with_ocr(str(pdf_path), mode="auto")
+            md = result.markdown
+            meta = _ocr_meta(arxiv_id, url, md, result)
+        except ValueError as error:
+            try:
+                native = pdf_inspector.process_pdf_with_ocr(str(pdf_path), mode="off")
+            except ValueError:
+                if reused_cached_pdf and _download_pdf(url, pdf_path):
+                    reused_cached_pdf = False
+                    continue
+                native = None
+            if native is None or not _usable(native.markdown):
+                print(f"{arxiv_id}: PDF conversion failed: {error}", file=sys.stderr)
+                print(f"OCR runtime setup: {OCR_RUNTIME_GUIDE}", file=sys.stderr)
+                return False
+            md = native.markdown
+            meta = _native_fallback_meta(arxiv_id, url, md, native, error)
+            print(f"{arxiv_id}: OCR unavailable; cached {meta['quality']} native extraction", file=sys.stderr)
+        break
 
     if not _usable(md):
         chars = len(md.strip()) if md else 0
