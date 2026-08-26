@@ -217,7 +217,7 @@ def convert(arxiv_id: str) -> bool:
         return False
 
     md_path = d / "paper.md"
-    md_path.write_text(md, encoding="utf-8")
+    md_path.write_bytes(md.encode("utf-8"))
     (d / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"{arxiv_id}: {len(md)} chars -> {md_path}")
     return True

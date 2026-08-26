@@ -70,6 +70,22 @@ def test_selective_ocr_writes_page_provenance(tmp_path, monkeypatch):
     assert meta["pages"][0]["ocr_model"]["revision"] == "test"
 
 
+def test_selective_ocr_writes_the_hashed_markdown_bytes(tmp_path, monkeypatch):
+    markdown = ("첫 줄\nsecond line\n" * 10).strip()
+    monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(arxiv_pdf, "_fetch", lambda _url: b"%PDF-test")
+    monkeypatch.setitem(
+        sys.modules,
+        "pdf_inspector",
+        SimpleNamespace(process_pdf_with_ocr=lambda _path, mode: _ocr_result(markdown)),
+    )
+
+    assert arxiv_pdf.convert("2601.00001") is True
+    paper_dir = tmp_path / "2601.00001"
+    assert (paper_dir / "paper.md").read_bytes() == markdown.encode("utf-8")
+    assert arxiv_pdf._cached_conversion(paper_dir) == paper_dir / "paper.md"
+
+
 def test_runtime_failure_caches_partial_native_extraction(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(arxiv_pdf, "_fetch", lambda _url: b"%PDF-test")
