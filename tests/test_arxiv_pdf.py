@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sys
 from types import SimpleNamespace
@@ -193,9 +194,37 @@ def test_unusable_cached_pdf_output_is_refetched_once(tmp_path, monkeypatch):
 def test_current_converter_cache_does_not_require_the_extra(tmp_path, monkeypatch):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
-    (paper_dir / "paper.md").write_text("cached" * 20)
-    (paper_dir / "meta.json").write_text(json.dumps({"converter": "pdf-inspector"}))
+    markdown = "cached" * 20
+    encoded = markdown.encode()
+    (paper_dir / "paper.md").write_bytes(encoded)
+    (paper_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "converter": "pdf-inspector",
+                "bytes": len(encoded),
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+            }
+        )
+    )
     monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
     monkeypatch.setitem(sys.modules, "pdf_inspector", None)
 
     assert arxiv_pdf.convert("2601.00001") is True
+
+
+def test_current_converter_cache_rejects_mismatched_markdown(tmp_path):
+    paper_dir = tmp_path / "2601.00001"
+    paper_dir.mkdir()
+    original = b"original" * 20
+    (paper_dir / "paper.md").write_bytes(b"corrupted" * 20)
+    (paper_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "converter": "pdf-inspector",
+                "bytes": len(original),
+                "sha256": hashlib.sha256(original).hexdigest(),
+            }
+        )
+    )
+
+    assert arxiv_pdf._cached_conversion(paper_dir) is None

@@ -48,10 +48,16 @@ def _cached_conversion(d: Path) -> Path | None:
     if not md_path.is_file() or md_path.stat().st_size < MIN_MARKDOWN_CHARS or not meta_path.is_file():
         return None
     try:
+        markdown = md_path.read_bytes()
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
-    return md_path if meta.get("converter") == CONVERTER else None
+    valid = (
+        meta.get("converter") == CONVERTER
+        and meta.get("bytes") == len(markdown)
+        and meta.get("sha256") == hashlib.sha256(markdown).hexdigest()
+    )
+    return md_path if valid else None
 
 
 def _converter_version() -> str:

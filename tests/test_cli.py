@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -122,8 +124,17 @@ def test_dblp_build_is_exposed_through_cli(monkeypatch, capsys, tmp_path):
 def test_offline_pdf_accepts_a_short_current_conversion(monkeypatch, tmp_path):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
-    (paper_dir / "paper.md").write_text("short OCR result " * 8)
-    (paper_dir / "meta.json").write_text('{"converter": "pdf-inspector"}')
+    markdown = ("short OCR result " * 8).encode()
+    (paper_dir / "paper.md").write_bytes(markdown)
+    (paper_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "converter": "pdf-inspector",
+                "bytes": len(markdown),
+                "sha256": hashlib.sha256(markdown).hexdigest(),
+            }
+        )
+    )
     monkeypatch.setenv("PAPERSTACK_PAPERS_DIR", str(tmp_path))
     monkeypatch.setattr(sys, "argv", ["paperstack", "paper", "pdf", "arxiv:2601.00001", "--offline"])
     monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
