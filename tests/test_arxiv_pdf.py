@@ -161,6 +161,35 @@ def test_corrupt_cached_pdf_is_refetched_once(tmp_path, monkeypatch):
     assert (paper_dir / "paper.md").read_text() == "repaired" * 25
 
 
+def test_unusable_cached_pdf_output_is_refetched_once(tmp_path, monkeypatch):
+    paper_dir = tmp_path / "2601.00001"
+    paper_dir.mkdir()
+    pdf_path = paper_dir / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-truncated")
+    fetches = []
+
+    def fetch(url):
+        fetches.append(url)
+        return b"%PDF-repaired"
+
+    def convert_pdf(path, mode):
+        markdown = "short" if pdf_path.read_bytes() == b"%PDF-truncated" else "repaired" * 25
+        return _ocr_result(markdown)
+
+    monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(arxiv_pdf, "_fetch", fetch)
+    monkeypatch.setitem(
+        sys.modules,
+        "pdf_inspector",
+        SimpleNamespace(process_pdf_with_ocr=convert_pdf),
+    )
+
+    assert arxiv_pdf.convert("2601.00001") is True
+    assert fetches == ["https://arxiv.org/pdf/2601.00001"]
+    assert pdf_path.read_bytes() == b"%PDF-repaired"
+    assert (paper_dir / "paper.md").read_text() == "repaired" * 25
+
+
 def test_current_converter_cache_does_not_require_the_extra(tmp_path, monkeypatch):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()

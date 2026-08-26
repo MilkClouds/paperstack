@@ -175,28 +175,35 @@ def convert(arxiv_id: str) -> bool:
         return False
 
     while True:
+        ocr_error = None
         try:
             result = pdf_inspector.process_pdf_with_ocr(str(pdf_path), mode="auto")
             md = result.markdown
             meta = _ocr_meta(arxiv_id, url, md, result)
         except ValueError as error:
+            ocr_error = error
             try:
                 native = pdf_inspector.process_pdf_with_ocr(str(pdf_path), mode="off")
             except ValueError:
-                if reused_cached_pdf and _download_pdf(url, pdf_path):
-                    reused_cached_pdf = False
-                    continue
                 native = None
-            if native is None or not _usable(native.markdown):
-                print(f"{arxiv_id}: PDF conversion failed: {error}", file=sys.stderr)
-                print(f"OCR runtime setup: {OCR_RUNTIME_GUIDE}", file=sys.stderr)
-                return False
-            md = native.markdown
-            meta = _native_fallback_meta(arxiv_id, url, md, native, error)
-            print(f"{arxiv_id}: OCR unavailable; cached {meta['quality']} native extraction", file=sys.stderr)
-        break
+            if native is None:
+                md = None
+            else:
+                md = native.markdown
+                if _usable(md):
+                    meta = _native_fallback_meta(arxiv_id, url, md, native, error)
 
-    if not _usable(md):
+        if _usable(md):
+            if ocr_error is not None:
+                print(f"{arxiv_id}: OCR unavailable; cached {meta['quality']} native extraction", file=sys.stderr)
+            break
+        if reused_cached_pdf and _download_pdf(url, pdf_path):
+            reused_cached_pdf = False
+            continue
+        if ocr_error is not None:
+            print(f"{arxiv_id}: PDF conversion failed: {ocr_error}", file=sys.stderr)
+            print(f"OCR runtime setup: {OCR_RUNTIME_GUIDE}", file=sys.stderr)
+            return False
         chars = len(md.strip()) if md else 0
         print(f"{arxiv_id}: converted to only {chars} chars, treat as a failure", file=sys.stderr)
         return False
