@@ -1004,9 +1004,9 @@ def _run_paper(a: argparse.Namespace) -> int:
         from .content import arxiv_pdf
 
         arxiv_pdf.CACHE_DIR = _paper_cache()
-        cached_pdf = arxiv_pdf.CACHE_DIR / ref.value / "paper.md"
-        if offline and (not cached_pdf.is_file() or cached_pdf.stat().st_size <= 1000):
-            die(f"no complete cached PDF conversion for arxiv:{ref.value}")
+        cached_pdf = arxiv_pdf._cached_conversion(arxiv_pdf.CACHE_DIR / ref.value)
+        if offline and cached_pdf is None:
+            die(f"no usable cached PDF conversion for arxiv:{ref.value}")
         if not arxiv_pdf.convert(ref.value):
             return 1
         return 0

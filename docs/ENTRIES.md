@@ -42,6 +42,7 @@ yt-dlp --skip-download --write-auto-subs --sub-lang en -o talk <url>
 ```
 
 - Prefer the LaTeX source; use the PDF fallback only when no source exists.
+- PDF conversion uses native extraction first and selectively OCRs pages that need it; inspect `meta.json` for page-level provenance and partial-quality warnings.
 - Cross-check malformed tables with `pdftotext -layout <pdf> -`.
 - Treat commented-out results as evidence only when their surviving values match the published version; a mismatched baseline may be an earlier run.
 - Strip timestamps and duplicate cues from video captions.
