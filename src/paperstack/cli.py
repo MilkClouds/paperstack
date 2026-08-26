@@ -1004,10 +1004,13 @@ def _run_paper(a: argparse.Namespace) -> int:
         from .content import arxiv_pdf
 
         arxiv_pdf.CACHE_DIR = _paper_cache()
-        cached_pdf = arxiv_pdf._cached_conversion(arxiv_pdf.CACHE_DIR / ref.value)
+        cached_pdf = arxiv_pdf._cached_conversion(
+            arxiv_pdf.CACHE_DIR / ref.value,
+            allow_native_fallback=offline,
+        )
         if offline and cached_pdf is None:
             die(f"no usable cached PDF conversion for arxiv:{ref.value}")
-        if not arxiv_pdf.convert(ref.value):
+        if not arxiv_pdf.convert(ref.value, allow_native_fallback=offline):
             return 1
         return 0
     raise AssertionError(a.paper_cmd)

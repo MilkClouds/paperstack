@@ -130,6 +130,7 @@ def test_offline_pdf_accepts_a_short_current_conversion(monkeypatch, tmp_path):
         json.dumps(
             {
                 "converter": "pdf-inspector",
+                "conversion_mode": "native_fallback",
                 "bytes": len(markdown),
                 "sha256": hashlib.sha256(markdown).hexdigest(),
             }

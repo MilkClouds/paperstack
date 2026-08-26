@@ -111,7 +111,11 @@ def test_runtime_failure_caches_partial_native_extraction(tmp_path, monkeypatch,
 
 def test_runtime_failure_rejects_a_fully_scanned_pdf(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
-    monkeypatch.setattr(arxiv_pdf, "_fetch", lambda _url: b"%PDF-test")
+    fetches = []
+    monkeypatch.setattr(arxiv_pdf, "_fetch", lambda url: fetches.append(url) or b"%PDF-test")
+    paper_dir = tmp_path / "2601.00001"
+    paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-cached")
 
     def convert_pdf(_path, mode):
         if mode == "auto":
@@ -125,6 +129,7 @@ def test_runtime_failure_rejects_a_fully_scanned_pdf(tmp_path, monkeypatch, caps
     )
 
     assert arxiv_pdf.convert("2601.00001") is False
+    assert fetches == []
     error = capsys.readouterr().err
     assert "failed to load PDFium" in error
     assert "PDFIUM_LIB_PATH" in error
@@ -193,7 +198,11 @@ def test_unusable_cached_pdf_output_is_refetched_once(tmp_path, monkeypatch):
 
     def convert_pdf(path, mode):
         markdown = "short" if pdf_path.read_bytes() == b"%PDF-truncated" else "repaired" * 25
-        return _ocr_result(markdown)
+        result = _ocr_result(markdown)
+        if markdown == "short":
+            result.pages_recommended_for_ocr = []
+            result.pages_routed_to_ocr = []
+        return result
 
     monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(arxiv_pdf, "_fetch", fetch)
@@ -228,6 +237,26 @@ def test_current_converter_cache_does_not_require_the_extra(tmp_path, monkeypatc
     monkeypatch.setitem(sys.modules, "pdf_inspector", None)
 
     assert arxiv_pdf.convert("2601.00001") is True
+
+
+def test_native_fallback_cache_is_only_terminal_offline(tmp_path):
+    paper_dir = tmp_path / "2601.00001"
+    paper_dir.mkdir()
+    markdown = b"partial" * 20
+    (paper_dir / "paper.md").write_bytes(markdown)
+    (paper_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "converter": "pdf-inspector",
+                "conversion_mode": "native_fallback",
+                "bytes": len(markdown),
+                "sha256": hashlib.sha256(markdown).hexdigest(),
+            }
+        )
+    )
+
+    assert arxiv_pdf._cached_conversion(paper_dir) is None
+    assert arxiv_pdf._cached_conversion(paper_dir, allow_native_fallback=True) == paper_dir / "paper.md"
 
 
 def test_current_converter_cache_rejects_mismatched_markdown(tmp_path):
