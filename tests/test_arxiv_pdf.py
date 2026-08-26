@@ -93,7 +93,10 @@ def test_runtime_failure_caches_partial_native_extraction(tmp_path, monkeypatch,
     def convert_pdf(_path, mode):
         if mode == "auto":
             raise ValueError("failed to load PDFium")
-        return _native_result()
+        result = _native_result()
+        result.pages_recommended_for_ocr = []
+        result.pages_recommending_hosted = []
+        return result
 
     monkeypatch.setitem(
         sys.modules,

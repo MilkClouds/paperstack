@@ -128,7 +128,7 @@ def _ocr_meta(arxiv_id: str, url: str, markdown: str, result) -> dict:
 def _native_fallback_meta(arxiv_id: str, url: str, markdown: str, result, error: ValueError) -> dict:
     meta = _ocr_meta(arxiv_id, url, markdown, result)
     meta["conversion_mode"] = "native_fallback"
-    meta["quality"] = "partial" if result.pages_recommended_for_ocr else "complete"
+    meta["quality"] = "partial"
     meta["ocr_error"] = str(error)
     return meta
 
