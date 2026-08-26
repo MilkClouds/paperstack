@@ -21,6 +21,18 @@ PDF conversion is optional:
 uv tool install 'paperstack-cli[pdf]'
 ```
 
+The PDF extra uses `pdf-inspector` for native extraction and selective OCR.
+Clean text PDFs need no external runtime, while routed OCR pages require the pinned PDFium and ONNX Runtime libraries described in the [OCR runtime guide](https://github.com/firecrawl/pdf-inspector/blob/main/docs/ocr-runtime.md).
+The first routed page downloads and verifies the pinned OCR model set unless an offline model directory is configured.
+When the shared libraries are not on the platform search path, point `pdf-inspector` at the extracted files:
+
+```bash
+export PDFIUM_LIB_PATH=/absolute/path/to/libpdfium.so
+export ORT_DYLIB_PATH=/absolute/path/to/libonnxruntime.so
+```
+
+The runtime guide lists the matching downloads and filenames for Linux, macOS, and Windows.
+
 ## AI agent skill
 
 Paperstack ships an [Agent Skills](https://agentskills.io)-compatible skill for Codex, Claude Code, and other

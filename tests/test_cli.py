@@ -1,9 +1,12 @@
+import hashlib
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
 from paperstack import cli, dblp_build, dblp_index, metadata
+from paperstack.content import arxiv_pdf
 
 
 def _help(monkeypatch, capsys, *args):
@@ -116,3 +119,25 @@ def test_dblp_build_is_exposed_through_cli(monkeypatch, capsys, tmp_path):
     assert calls[0][1]["selected_venues"] == ["rss"]
     assert calls[0][1]["selected_years"] == [2026]
     assert "records: 1" in capsys.readouterr().out
+
+
+def test_offline_pdf_accepts_a_short_current_conversion(monkeypatch, tmp_path):
+    paper_dir = tmp_path / "2601.00001"
+    paper_dir.mkdir()
+    markdown = ("short OCR result " * 8).encode()
+    (paper_dir / "paper.md").write_bytes(markdown)
+    (paper_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "converter": "pdf-inspector",
+                "conversion_mode": "native_fallback",
+                "bytes": len(markdown),
+                "sha256": hashlib.sha256(markdown).hexdigest(),
+            }
+        )
+    )
+    monkeypatch.setenv("PAPERSTACK_PAPERS_DIR", str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["paperstack", "paper", "pdf", "arxiv:2601.00001", "--offline"])
+    monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
+
+    assert cli.main() == 0

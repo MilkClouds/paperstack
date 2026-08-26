@@ -9,6 +9,8 @@ from dotenv import find_dotenv, load_dotenv
 
 from . import credentials
 
+_EXPORTED_ONLY = ("PDFIUM_LIB_PATH", "ORT_DYLIB_PATH")
+
 
 def load_environment() -> None:
     """Load the nearest .env without replacing exported variables."""
@@ -16,6 +18,9 @@ def load_environment() -> None:
     path = find_dotenv(usecwd=True)
     if path:
         load_dotenv(path, override=False)
+    for name in _EXPORTED_ONLY:
+        if name not in exported_keys:
+            os.environ.pop(name, None)
     credentials.set_environment_context(exported_keys, Path(path) if path else None)
 
 

@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-pdf = ["pymupdf4llm>=0.0.17"]
+pdf = ["pdf-inspector>=1.17,<2"]
 
 [dependency-groups]
 lint = ["ruff>=0.12"]
