@@ -127,6 +127,8 @@ def test_runtime_failure_rejects_a_fully_scanned_pdf(tmp_path, monkeypatch, caps
     assert arxiv_pdf.convert("2601.00001") is False
     error = capsys.readouterr().err
     assert "failed to load PDFium" in error
+    assert "PDFIUM_LIB_PATH" in error
+    assert "ORT_DYLIB_PATH" in error
     assert arxiv_pdf.OCR_RUNTIME_GUIDE in error
 
 

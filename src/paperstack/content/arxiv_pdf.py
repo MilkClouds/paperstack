@@ -210,6 +210,10 @@ def convert(arxiv_id: str) -> bool:
             continue
         if ocr_error is not None:
             print(f"{arxiv_id}: PDF conversion failed: {ocr_error}", file=sys.stderr)
+            print(
+                "OCR needs PDFium and ONNX Runtime; set PDFIUM_LIB_PATH and ORT_DYLIB_PATH.",
+                file=sys.stderr,
+            )
             print(f"OCR runtime setup: {OCR_RUNTIME_GUIDE}", file=sys.stderr)
             return False
         chars = len(md.strip()) if md else 0
