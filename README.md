@@ -1,6 +1,6 @@
 # Paperstack
 
-[![CI](https://github.com/MilkClouds/paperstack/actions/workflows/ci.yml/badge.svg)](https://github.com/MilkClouds/paperstack/actions/workflows/ci.yml) [![PyPI version](https://img.shields.io/pypi/v/paperstack-cli.svg)](https://pypi.org/project/paperstack-cli/) [![Python versions](https://img.shields.io/pypi/pyversions/paperstack-cli.svg)](https://pypi.org/project/paperstack-cli/) [![License](https://img.shields.io/pypi/l/paperstack-cli.svg)](https://github.com/MilkClouds/paperstack/blob/main/LICENSE)
+[![CI](https://github.com/MilkClouds/paperstack/actions/workflows/ci.yml/badge.svg)](https://github.com/MilkClouds/paperstack/actions/workflows/ci.yml) [![PyPI version](https://img.shields.io/pypi/v/paperstack-cli.svg)](https://pypi.org/project/paperstack-cli/) [![Python versions](https://img.shields.io/pypi/pyversions/paperstack-cli.svg?cacheSeconds=300)](https://pypi.org/project/paperstack-cli/) [![License](https://img.shields.io/pypi/l/paperstack-cli.svg)](https://github.com/MilkClouds/paperstack/blob/main/LICENSE)
 
 Paperstack is an open-source CLI for maintaining, querying, and publishing an independently authored research corpus.
 The software and corpus are separate: Paperstack can be public while each corpus and its editorial judgments remain
