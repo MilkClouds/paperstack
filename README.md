@@ -1,5 +1,7 @@
 # Paperstack
 
+[![PyPI version](https://img.shields.io/pypi/v/paperstack-cli.svg)](https://pypi.org/project/paperstack-cli/)
+
 Paperstack is an open-source CLI for maintaining, querying, and publishing an independently authored research corpus.
 The software and corpus are separate: Paperstack can be public while each corpus and its editorial judgments remain
 under its maintainer's control.
