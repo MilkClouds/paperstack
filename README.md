@@ -118,6 +118,7 @@ paperstack paper search "robot learning" --source semantic-scholar --normalized-
 paperstack paper search 'ti:"robot learning"' --source arxiv --category cs.RO --sort date
 paperstack paper metadata arxiv:2106.09685
 paperstack paper metadata doi:10.1109/CVPR.2016.90 --source crossref
+paperstack paper verify-publication "Exact Paper Title"
 paperstack paper citations arxiv:2106.09685 --limit 50
 paperstack paper references doi:10.48550/arXiv.2106.09685 --limit 50
 paperstack paper read arxiv:2604.23073 --outline
@@ -139,6 +140,10 @@ claim about every version of the work.
 OpenReview exact-title search uses its title-only exact mode and verifies a normalized title match locally. Status
 filtering is conservative because venues encode decisions and withdrawals differently; Paperstack infers it from
 public invitation, venue, decision, and status fields rather than treating it as a universal field.
+
+`verify-publication` checks normalized exact-title matches in priority order: DBLP, accepted OpenReview records,
+Crossref, then arXiv. It stops at the first formal source tier and reports every source it actually checked. A negative
+result means no formal publication was found in those checked sources, not that no publication exists anywhere.
 
 ## Build a viewer
 

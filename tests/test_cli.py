@@ -74,6 +74,50 @@ def test_normalized_json_is_mutually_exclusive_with_raw_json(monkeypatch):
     assert exc.value.code == 2
 
 
+def test_verify_publication_prints_bounded_result(monkeypatch, capsys):
+    monkeypatch.setattr(
+        metadata,
+        "verify_publication",
+        lambda title: {
+            "status": "ok",
+            "resolution": "preprint",
+            "message": "No formal publication found in checked sources.",
+            "recommendation": "Recommended entry type: arXiv preprint.",
+            "checked": [{"source": "dblp", "error": None}, {"source": "arxiv", "error": None}],
+        },
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["paperstack", "paper", "verify-publication", "Exact Paper Title"],
+    )
+
+    assert cli.main() == 0
+    assert capsys.readouterr().out == (
+        "No formal publication found in checked sources.\n"
+        "Recommended entry type: arXiv preprint.\n"
+        "Checked: dblp, arxiv\n"
+    )
+
+
+def test_verify_publication_offline_fails_before_lookup(monkeypatch):
+    monkeypatch.setattr(
+        metadata,
+        "verify_publication",
+        lambda title: pytest.fail("unexpected network lookup"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["paperstack", "paper", "verify-publication", "Exact Paper Title", "--offline"],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 3
+
+
 def test_search_prints_normalized_json(monkeypatch, capsys):
     monkeypatch.setattr(
         metadata,

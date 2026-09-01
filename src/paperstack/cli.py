@@ -879,6 +879,24 @@ def _run_paper(a: argparse.Namespace) -> int:
     from . import credentials, metadata
 
     offline = getattr(a, "offline", False)
+    if a.paper_cmd == "verify-publication":
+        if offline:
+            die("publication verification requires network access")
+        try:
+            result = metadata.verify_publication(a.title)
+        except (credentials.CredentialsError, RuntimeError, ValueError) as exc:
+            die(f"publication verification failed: {exc}")
+        if a.json:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(result["message"])
+            if result["recommendation"]:
+                print(result["recommendation"])
+            print("Checked: " + ", ".join(item["source"] for item in result["checked"]))
+            for item in result["checked"]:
+                if item["error"]:
+                    print(f"Warning: {item['source']}: {item['error']}", file=sys.stderr)
+        return 1 if result["status"] == "error" else 0
     if a.paper_cmd in ("authors", "citations", "references"):
         if offline:
             die(f"paper {a.paper_cmd} requires network access")
@@ -1226,6 +1244,10 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         help="filter OpenReview forum records by inferred status",
     )
     _output(s, normalized=True)
+    _offline(s)
+    s = paper_sub.add_parser("verify-publication", help="resolve a title through publication sources")
+    s.add_argument("title", help="exact paper title")
+    _output(s)
     _offline(s)
     for command in ("authors", "citations", "references"):
         s = paper_sub.add_parser(command, help=f"inspect Semantic Scholar {command}")

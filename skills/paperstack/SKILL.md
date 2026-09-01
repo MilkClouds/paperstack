@@ -48,6 +48,7 @@ paperstack review show arxiv:2410.24164 --json
 paperstack review list --quality good --tag vla
 paperstack paper metadata arxiv:2106.09685
 paperstack paper metadata arxiv:2106.09685 --normalized-json
+paperstack paper verify-publication "Exact Paper Title"
 paperstack paper search "Exact Paper Title" --source openreview --exact-title
 paperstack paper search "flow matching robotics" --source semantic-scholar --year 2024-2026
 paperstack paper search 'ti:"flow matching"' --source arxiv --category cs.RO --sort date
@@ -61,6 +62,8 @@ Use `paperstack paper pdf` only when the source workflow needs a PDF. Install th
 
 Treat paper metadata and citation graphs as source records, not as a selected citation. Do not synthesize BibTeX or
 choose a citable version from those records without checking the publication venue and the primary source.
+Use `verify-publication` for the bounded DBLP → accepted OpenReview → Crossref → arXiv check; describe a miss as
+"not found in checked sources," never as proof that no formal publication exists.
 
 ## Author entries
 

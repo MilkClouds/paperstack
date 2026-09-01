@@ -148,6 +148,7 @@ def test_normalized_results_use_stable_envelope_and_record_shape():
                             {
                                 "DOI": "10.1/example",
                                 "title": ["Published paper"],
+                                "type": "journal-article",
                                 "author": [{"given": "A.", "family": "Author"}],
                                 "published": {"date-parts": [[2025, 1, 2]]},
                             }
@@ -227,6 +228,134 @@ def test_normalized_results_extract_semantic_scholar_journal_name():
     )
 
     assert result["papers"][0]["venue"] == "Journal of Tests"
+
+
+def test_verify_publication_stops_at_first_formal_tier(monkeypatch):
+    calls = []
+
+    def search(source, query, **kwargs):
+        calls.append((source, kwargs))
+        return {
+            "source": "dblp",
+            "status": "ok",
+            "response": {
+                "matches": [
+                    {
+                        "title": "Exact Paper Title",
+                        "dblp_key": "conf/test/Paper25",
+                        "year": 2025,
+                        "venue": "Test Conference",
+                    }
+                ]
+            },
+        }
+
+    monkeypatch.setattr(metadata, "search", search)
+
+    result = metadata.verify_publication("Exact Paper Title")
+
+    assert result["resolution"] == "formal"
+    assert [item["source"] for item in result["checked"]] == ["dblp"]
+    assert calls == [("dblp", {"limit": 10})]
+
+
+def test_verify_publication_recommends_preprint_only_after_formal_sources(monkeypatch):
+    calls = []
+
+    def search(source, query, **kwargs):
+        calls.append((source, kwargs))
+        if source == "arxiv":
+            return {
+                "source": "arxiv",
+                "status": "ok",
+                "response": {
+                    "matches": [
+                        {
+                            "id": "2401.00001",
+                            "title": "Exact Paper Title",
+                            "published": "2024-01-01T00:00:00Z",
+                        }
+                    ]
+                },
+            }
+        return {"source": source, "status": "ok", "response": {"matches": []}}
+
+    monkeypatch.setattr(metadata, "search", search)
+
+    result = metadata.verify_publication("Exact Paper Title")
+
+    assert result["resolution"] == "preprint"
+    assert result["recommendation"] == "Recommended entry type: arXiv preprint."
+    assert [source for source, _ in calls] == ["dblp", "openreview", "crossref", "arxiv"]
+    assert calls[1][1] == {"limit": 10, "exact_title": True, "openreview_status": "accepted"}
+
+
+def test_verify_publication_reports_source_failures_as_partial(monkeypatch):
+    def search(source, query, **kwargs):
+        if source == "dblp":
+            return {"source": source, "status": "error", "error": "offline"}
+        return {"source": source, "status": "ok", "response": {"matches": []}}
+
+    monkeypatch.setattr(metadata, "search", search)
+
+    result = metadata.verify_publication("Exact Paper Title")
+
+    assert result["status"] == "partial"
+    assert result["resolution"] == "inconclusive"
+    assert result["recommendation"] is None
+    assert result["checked"][0]["error"] == "offline"
+
+
+@pytest.mark.parametrize(
+    ("source", "record"),
+    [
+        (
+            "dblp",
+            {
+                "title": "Exact Paper Title",
+                "key": "journals/corr/abs-2401-00001",
+                "venue": "CoRR",
+            },
+        ),
+        (
+            "crossref",
+            {
+                "title": ["Exact Paper Title"],
+                "DOI": "10.1101/2025.01.01.000001",
+                "type": "posted-content",
+            },
+        ),
+    ],
+)
+def test_preprint_provider_records_are_not_formal(source, record):
+    result = metadata.normalize_results(
+        {
+            "source": source,
+            "status": "ok",
+            "response": {"matches": [record]} if source == "dblp" else {"message": {"items": [record]}},
+        }
+    )
+
+    assert result["papers"][0]["publication_status"] == "preprint"
+
+
+def test_verify_publication_errors_when_every_formal_source_fails(monkeypatch):
+    def search(source, query, **kwargs):
+        if source == "arxiv":
+            return {
+                "source": source,
+                "status": "ok",
+                "response": {"matches": [{"id": "2401.00001", "title": "Exact Paper Title"}]},
+            }
+        return {"source": source, "status": "error", "error": "unavailable"}
+
+    monkeypatch.setattr(metadata, "search", search)
+
+    result = metadata.verify_publication("Exact Paper Title")
+
+    assert result["status"] == "error"
+    assert result["resolution"] == "inconclusive"
+    assert result["recommendation"] is None
 
 
 @pytest.mark.parametrize(

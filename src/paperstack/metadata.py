@@ -466,12 +466,31 @@ def _normalized_paper(source: str, record: dict, source_url: str | None) -> dict
         "arxiv": content.get("id"),
         "acl_anthology": content.get("key") or content.get("doi"),
     }.get(source)
-    status = {
-        "arxiv": "preprint",
-        "dblp": "published",
-        "crossref": "published",
-        "acl_anthology": "published",
-    }.get(source, "unknown")
+    status = {"arxiv": "preprint", "acl_anthology": "published"}.get(source, "unknown")
+    if source == "dblp":
+        key = str(source_id or "").casefold()
+        status = "preprint" if key.startswith("journals/corr/") or str(venue).casefold() == "corr" else "published"
+    if source == "crossref":
+        record_type = str(content.get("type") or "").casefold()
+        status = (
+            "preprint"
+            if record_type in ("posted-content", "preprint")
+            else "published"
+            if record_type
+            in (
+                "book",
+                "book-chapter",
+                "book-section",
+                "dissertation",
+                "journal-article",
+                "monograph",
+                "proceedings",
+                "proceedings-article",
+                "reference-entry",
+                "report",
+            )
+            else "unknown"
+        )
     if source == "semantic_scholar":
         types = content.get("publicationTypes") or []
         status = "published" if types else "preprint" if (content.get("externalIds") or {}).get("ArXiv") else "unknown"
@@ -516,6 +535,84 @@ def normalize_results(results: list[dict] | dict) -> dict:
         papers.extend(_normalized_paper(result["source"], record, result.get("url")) for record in records)
     status = "ok" if not errors else "partial" if papers else "error"
     return {"status": status, "papers": papers, "errors": errors}
+
+
+def _exact_papers(result: dict, title: str) -> list[dict]:
+    wanted = _normalized_title(title)
+    return [paper for paper in normalize_results(result)["papers"] if _normalized_title(paper["title"]) == wanted]
+
+
+def verify_publication(title: str) -> dict:
+    title = title.strip()
+    if not title:
+        raise ValueError("paper title is required")
+    checked = []
+    evidence = []
+
+    def inspect(source: str, result: dict) -> list[dict]:
+        papers = _exact_papers(result, title) if result.get("status") == "ok" else []
+        checked.append(
+            {
+                "source": source,
+                "status": result.get("status", "error"),
+                "exact_matches": len(papers),
+                "error": result.get("error") or result.get("reason"),
+            }
+        )
+        return papers
+
+    formal_statuses = {"published", "accepted"}
+    formal = [
+        paper
+        for paper in inspect("dblp", search("dblp", title, limit=10))
+        if paper["publication_status"] in formal_statuses
+    ]
+    if not formal:
+        formal = [
+            paper
+            for paper in inspect(
+                "openreview",
+                search("openreview", title, limit=10, exact_title=True, openreview_status="accepted"),
+            )
+            if paper["publication_status"] in formal_statuses
+        ]
+    if not formal:
+        crossref = inspect("crossref", search("crossref", title, limit=10))
+        formal = [paper for paper in crossref if paper["publication_status"] in formal_statuses]
+    if formal:
+        evidence.extend(formal)
+        resolution = "formal"
+        message = "Formal publication record found."
+        recommendation = "Use the highest-priority formal source record."
+    else:
+        preprints = inspect("arxiv", search("arxiv", title, limit=10))
+        evidence.extend(preprints)
+        formal_failures = [item for item in checked[:-1] if item["status"] != "ok"]
+        if formal_failures:
+            resolution = "inconclusive"
+            message = "Formal publication verification is inconclusive because one or more formal sources failed."
+            recommendation = None
+        elif preprints:
+            resolution = "preprint"
+            message = "No formal publication found in checked sources."
+            recommendation = "Recommended entry type: arXiv preprint."
+        else:
+            resolution = "unresolved"
+            message = "No exact title match found in checked sources."
+            recommendation = None
+    failures = [item for item in checked if item["status"] != "ok"]
+    formal_checks = [item for item in checked if item["source"] != "arxiv"]
+    all_formal_failed = bool(formal_checks) and all(item["status"] != "ok" for item in formal_checks)
+    status = "error" if all_formal_failed else "partial" if failures else "ok"
+    return {
+        "status": status,
+        "query": title,
+        "resolution": resolution,
+        "message": message,
+        "recommendation": recommendation,
+        "checked": checked,
+        "evidence": evidence,
+    }
 
 
 def _content_value(note: dict, name: str):
