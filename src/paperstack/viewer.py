@@ -94,11 +94,12 @@ def build(root: Path, output: Path) -> int:
     ):
         raise ValueError("viewer output would replace a broad path, the corpus, or authored entries")
     backup = destination.parent / f".{destination.name}.backup"
-    if backup.exists() and not destination.exists():
+    if backup.exists():
         marker = backup / ".paperstack-viewer"
         if not backup.is_dir() or not marker.is_file() or marker.read_text(encoding="utf-8") != "1\n":
             raise ValueError(f"viewer backup is not owned by Paperstack: {backup}")
-        os.replace(backup, destination)
+        if not destination.exists():
+            os.replace(backup, destination)
     if destination.exists() and not destination.is_dir():
         raise ValueError(f"viewer output is not a directory: {destination}")
     if destination.exists() and any(destination.iterdir()):

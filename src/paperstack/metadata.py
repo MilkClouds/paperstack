@@ -305,11 +305,16 @@ def fetch_all(
     return results
 
 
-def search(source: str, query: str, *, local_only: bool = False) -> dict:
+def search(source: str, query: str, *, limit: int = 10, local_only: bool = False) -> dict:
+    query = query.strip()
+    if not query:
+        raise ValueError("paper search query is required")
+    if not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
     if source == "dblp":
         from . import dblp_index
 
-        if hits := dblp_index.search(query):
+        if hits := dblp_index.search(query, limit=limit):
             return _result("dblp", str(dblp_index.index_path()), {"query": query, "matches": hits})
         if local_only:
             return {
@@ -319,19 +324,25 @@ def search(source: str, query: str, *, local_only: bool = False) -> dict:
                 "reason": "not found in local index",
             }
         url = "https://dblp.org/search/publ/api"
+        has_field_token = re.search(r"(?:^|\s)(?:author|title|venue|year|type|stream|toc):[^:]+:", query)
+        remote_query = query if has_field_token else re.sub(r":\s+", " ", query)
         return _safe(
-            lambda: _result("dblp", url, _get_json(url, {"q": query, "format": "json", "h": 10})), "dblp", url
+            lambda: _result("dblp", url, _get_json(url, {"q": remote_query, "format": "json", "h": limit})),
+            "dblp",
+            url,
         )
     if source == "crossref":
         url = "https://api.crossref.org/works"
         return _safe(
-            lambda: _result("crossref", url, _get_json(url, {"query.title": query, "rows": 10})), "crossref", url
+            lambda: _result("crossref", url, _get_json(url, {"query.title": query, "rows": limit})),
+            "crossref",
+            url,
         )
     if source == "arxiv":
         url = "https://export.arxiv.org/api/query"
 
         def arxiv_search() -> dict:
-            root = ET.fromstring(_get_text(url, {"search_query": f'ti:"{query}"', "max_results": 10}))
+            root = ET.fromstring(_get_text(url, {"search_query": f'ti:"{query}"', "max_results": limit}))
             matches = [
                 {
                     "id": entry.findtext("atom:id", "", ARXIV_NS),
@@ -357,7 +368,7 @@ def search(source: str, query: str, *, local_only: bool = False) -> dict:
                 lambda endpoint=endpoint: _result(
                     "openreview",
                     endpoint,
-                    _get_json(endpoint, {"query": query, "limit": 10, "source": "forum"}, headers),
+                    _get_json(endpoint, {"query": query, "limit": limit, "source": "forum"}, headers),
                 ),
                 "openreview",
                 endpoint,
@@ -374,13 +385,13 @@ def search(source: str, query: str, *, local_only: bool = False) -> dict:
         return _result(
             "openreview",
             endpoints[0],
-            {"query": query, "matches": list(unique.values()), "api_endpoints": list(endpoints)},
+            {"query": query, "matches": list(unique.values())[:limit], "api_endpoints": list(endpoints)},
         )
     if source == "s2":
         url = "https://api.semanticscholar.org/graph/v1/paper/search"
         api_key = credentials.get(credentials.SEMANTIC_SCHOLAR_API_KEY)
         headers = {"x-api-key": api_key} if api_key else {}
-        params = {"query": query, "limit": 10, "fields": S2_FIELDS}
+        params = {"query": query, "limit": limit, "fields": S2_FIELDS}
         return _safe(
             lambda: _result("semantic_scholar", url, _get_json(url, params, headers)), "semantic_scholar", url
         )

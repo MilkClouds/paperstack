@@ -925,12 +925,32 @@ def _run_paper(a: argparse.Namespace) -> int:
         metadata.print_results(results, json_output=a.json)
         return 0 if any(item["status"] == "ok" for item in results) else 1
     if a.paper_cmd == "search":
+        semantic_filters = [
+            flag
+            for flag, selected in (
+                ("--offset", a.offset),
+                ("--year", a.year),
+                ("--field-of-study", a.fields_of_study),
+                ("--open-access", a.open_access),
+            )
+            if selected
+        ]
+        arxiv_filters = [
+            flag
+            for flag, selected in (
+                ("--category", a.categories),
+                ("--date-from", a.date_from),
+                ("--date-to", a.date_to),
+                ("--sort", a.sort != "relevance"),
+            )
+            if selected
+        ]
         try:
             if a.source == "arxiv":
                 from . import arxiv
 
-                if a.year or a.fields_of_study or a.open_access or a.offset:
-                    die("--year, --field-of-study, --open-access, and --offset require --source semantic-scholar")
+                if semantic_filters:
+                    die(f"--source semantic-scholar is required for {', '.join(semantic_filters)}")
                 result = arxiv.search(
                     a.query,
                     categories=a.categories,
@@ -942,8 +962,8 @@ def _run_paper(a: argparse.Namespace) -> int:
             elif a.source == "semantic-scholar":
                 from . import semantic_scholar
 
-                if a.categories or a.date_from or a.date_to or a.sort != "relevance":
-                    die("--category, --date-from, --date-to, and --sort require --source arxiv")
+                if arxiv_filters:
+                    die(f"--source arxiv is required for {', '.join(arxiv_filters)}")
                 result = semantic_scholar.search(
                     a.query,
                     limit=a.limit,
@@ -953,19 +973,14 @@ def _run_paper(a: argparse.Namespace) -> int:
                     open_access=a.open_access,
                 )
             else:
-                if (
-                    a.categories
-                    or a.date_from
-                    or a.date_to
-                    or a.limit != 10
-                    or a.offset
-                    or a.sort != "relevance"
-                    or a.year
-                    or a.fields_of_study
-                    or a.open_access
-                ):
-                    die("search filters require --source arxiv or --source semantic-scholar")
-                result = metadata.search(a.source, a.query, local_only=offline)
+                requirements = []
+                if semantic_filters:
+                    requirements.append(f"--source semantic-scholar is required for {', '.join(semantic_filters)}")
+                if arxiv_filters:
+                    requirements.append(f"--source arxiv is required for {', '.join(arxiv_filters)}")
+                if requirements:
+                    die("; ".join(requirements))
+                result = metadata.search(a.source, a.query, limit=a.limit, local_only=offline)
         except credentials.CredentialsError as exc:
             die(f"configuration failed: {exc}")
         except RuntimeError as exc:
