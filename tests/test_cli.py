@@ -77,7 +77,58 @@ def test_search_limit_is_common_to_metadata_sources(monkeypatch, capsys, source)
     )
 
     assert cli.main() == 0
-    assert calls == [(source, "fixture", {"limit": 5, "local_only": False})]
+    assert calls == [
+        (
+            source,
+            "fixture",
+            {"limit": 5, "local_only": False, "exact_title": False, "openreview_status": None},
+        )
+    ]
+
+
+def test_openreview_search_routes_exact_filters(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        metadata,
+        "search",
+        lambda source, query, **kwargs: calls.append((source, query, kwargs)) or {"source": source, "status": "ok"},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "paperstack",
+            "paper",
+            "search",
+            "Exact Title",
+            "--source",
+            "openreview",
+            "--exact-title",
+            "--openreview-status",
+            "accepted",
+            "--json",
+        ],
+    )
+
+    assert cli.main() == 0
+    assert calls[0][2]["exact_title"] is True
+    assert calls[0][2]["openreview_status"] == "accepted"
+
+
+def test_json_search_error_has_nonzero_exit(monkeypatch, capsys):
+    monkeypatch.setattr(
+        metadata,
+        "search",
+        lambda *args, **kwargs: {"source": "openreview", "status": "error", "error": "HTTP 429"},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["paperstack", "paper", "search", "fixture", "--source", "openreview", "--json"],
+    )
+
+    assert cli.main() == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "error"
 
 
 def test_search_reports_the_incompatible_filter(monkeypatch, capsys):

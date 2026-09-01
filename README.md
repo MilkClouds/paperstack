@@ -112,6 +112,7 @@ These commands use external source records and do not select a citation or make 
 
 ```bash
 paperstack paper search "Attention Is All You Need" --source dblp
+paperstack paper search "Exact Paper Title" --source openreview --exact-title --openreview-status accepted
 paperstack paper search "robot learning" --source semantic-scholar --year 2024-2026
 paperstack paper search 'ti:"robot learning"' --source arxiv --category cs.RO --sort date
 paperstack paper metadata arxiv:2106.09685
@@ -128,6 +129,10 @@ reference. `authors`, `citations`, and `references` use Semantic Scholar and als
 `pmid:`, and `mag:` identifiers. Structured commands expose scoped `--json` flags; networked commands expose scoped
 `--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
 of a work should be cited.
+
+OpenReview exact-title search uses its title-only exact mode and verifies a normalized title match locally. Status
+filtering is conservative because venues encode decisions and withdrawals differently; Paperstack infers it from
+public invitation, venue, decision, and status fields rather than treating it as a universal field.
 
 ## Build a viewer
 
