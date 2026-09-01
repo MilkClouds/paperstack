@@ -45,6 +45,7 @@ paperstack review search "flow matching"
 paperstack review show arxiv:2410.24164 --json
 paperstack review list --quality good --tag vla
 paperstack paper metadata arxiv:2106.09685
+paperstack paper search "Exact Paper Title" --source openreview --exact-title
 paperstack paper search "flow matching robotics" --source semantic-scholar --year 2024-2026
 paperstack paper search 'ti:"flow matching"' --source arxiv --category cs.RO --sort date
 paperstack paper citations arxiv:2106.09685 --limit 50

@@ -6,11 +6,18 @@ import json
 import os
 import re
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from pathlib import Path
+
+from filelock import FileLock
 
 from . import credentials
 
@@ -45,6 +52,59 @@ class PaperRef:
 
 
 _last_request: dict[str, float] = {}
+_OPENREVIEW_HOSTS = {"api.openreview.net", "api2.openreview.net"}
+
+
+@contextmanager
+def _request_slot(key: str):
+    if key != "openreview":
+        yield None
+        return
+    base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    root = base / "paperstack" / "http"
+    try:
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        lock = FileLock(root / "openreview.lock", timeout=120)
+        lock.acquire()
+    except OSError:
+        yield None
+        return
+    try:
+        yield root / "openreview.timestamp"
+    finally:
+        lock.release()
+
+
+def _shared_elapsed(path: Path | None) -> float:
+    if path is None:
+        return float("inf")
+    try:
+        return max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        return float("inf")
+
+
+def _mark_request(path: Path | None) -> None:
+    if path is not None:
+        try:
+            path.touch()
+        except OSError:
+            pass
+
+
+def _retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float:
+    value = exc.headers.get("Retry-After") if exc.headers else None
+    if value:
+        try:
+            delay = float(value)
+        except ValueError:
+            try:
+                delay = (parsedate_to_datetime(value) - datetime.now(UTC)).total_seconds()
+            except (TypeError, ValueError, OverflowError):
+                delay = -1
+        if delay >= 0:
+            return min(delay, 120)
+    return min(2**attempt, 30)
 
 
 def request(
@@ -56,34 +116,41 @@ def request(
     if params:
         url += "?" + urllib.parse.urlencode(params)
     host = urllib.parse.urlparse(url).netloc
+    request_key = "openreview" if host in _OPENREVIEW_HOSTS else host
     interval = 3.0 if "arxiv.org" in host else 1.1 if "dblp.org" in host else 0.5
     request_headers = {
         "User-Agent": "paperstack (+https://github.com/MilkClouds/paperstack)",
         **(headers or {}),
     }
     req = urllib.request.Request(url, headers=request_headers, data=data)
-    for attempt in range(3):
-        elapsed = time.monotonic() - _last_request.get(host, 0.0)
-        if elapsed < interval:
-            time.sleep(interval - elapsed)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                _last_request[host] = time.monotonic()
-                return response.read()
-        except urllib.error.HTTPError as exc:
-            _last_request[host] = time.monotonic()
-            if exc.code != 429:
-                raise
-            if attempt == 2:
-                has_api_key = any(name.lower() == "x-api-key" for name in request_headers)
-                if host == "api.semanticscholar.org" and not has_api_key:
-                    message = (
-                        f"{exc.reason}; configure semantic-scholar.api-key with "
-                        "`paperstack config set semantic-scholar.api-key` for more reliable access"
-                    )
-                    raise urllib.error.HTTPError(exc.url, exc.code, message, exc.headers, exc.fp) from exc
-                raise
-            time.sleep(5 * (attempt + 1))
+    with _request_slot(request_key) as shared_timestamp:
+        for attempt in range(3):
+            elapsed = min(
+                time.monotonic() - _last_request.get(request_key, 0.0),
+                _shared_elapsed(shared_timestamp),
+            )
+            if elapsed < interval:
+                time.sleep(interval - elapsed)
+            try:
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    _last_request[request_key] = time.monotonic()
+                    _mark_request(shared_timestamp)
+                    return response.read()
+            except urllib.error.HTTPError as exc:
+                _last_request[request_key] = time.monotonic()
+                _mark_request(shared_timestamp)
+                if exc.code != 429:
+                    raise
+                if attempt == 2:
+                    has_api_key = any(name.lower() == "x-api-key" for name in request_headers)
+                    if host == "api.semanticscholar.org" and not has_api_key:
+                        message = (
+                            f"{exc.reason}; configure semantic-scholar.api-key with "
+                            "`paperstack config set semantic-scholar.api-key` for more reliable access"
+                        )
+                        raise urllib.error.HTTPError(exc.url, exc.code, message, exc.headers, exc.fp) from exc
+                    raise
+                time.sleep(_retry_delay(exc, attempt))
     raise RuntimeError("unreachable request retry state")
 
 
@@ -305,12 +372,46 @@ def fetch_all(
     return results
 
 
-def search(source: str, query: str, *, limit: int = 10, local_only: bool = False) -> dict:
+def _content_value(note: dict, name: str):
+    value = (note.get("content") or {}).get(name)
+    return value.get("value") if isinstance(value, dict) and "value" in value else value
+
+
+def _normalized_title(value: object) -> str:
+    return re.sub(r"\W+", "", unicodedata.normalize("NFKC", str(value or "")).casefold())
+
+
+def _openreview_status(note: dict) -> str:
+    venue = _content_value(note, "venue") or _content_value(note, "venueid") or _content_value(note, "venue_id")
+    fields = [*note.get("invitations", []), venue, _content_value(note, "decision"), _content_value(note, "status")]
+    text = " ".join(str(value) for value in fields if value).casefold()
+    if "withdraw" in text:
+        return "withdrawn"
+    if "reject" in text:
+        return "rejected"
+    if "accept" in text or venue and not any(word in str(venue).casefold() for word in ("submission", "submitted")):
+        return "accepted"
+    return "submission"
+
+
+def search(
+    source: str,
+    query: str,
+    *,
+    limit: int = 10,
+    local_only: bool = False,
+    exact_title: bool = False,
+    openreview_status: str | None = None,
+) -> dict:
     query = query.strip()
     if not query:
         raise ValueError("paper search query is required")
     if not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100")
+    if (exact_title or openreview_status) and source != "openreview":
+        raise ValueError("exact title and OpenReview status filters require the openreview source")
+    if openreview_status not in (None, "submission", "accepted", "withdrawn"):
+        raise ValueError("OpenReview status must be submission, accepted, or withdrawn")
     if source == "dblp":
         from . import dblp_index
 
@@ -358,34 +459,69 @@ def search(source: str, query: str, *, limit: int = 10, local_only: bool = False
         token = os.environ.get("OPENREVIEW_ACCESS_TOKEN")
         headers = {"Cookie": f"openreview.accessToken={token}"} if token else {}
         endpoints = (
-            "https://api2.openreview.net/notes/search",
-            "https://api.openreview.net/notes/search",
+            ("https://api2.openreview.net/notes/search", True),
+            ("https://api.openreview.net/notes/search", False),
         )
         matches = []
         errors = []
-        for endpoint in endpoints:
-            result = _safe(
-                lambda endpoint=endpoint: _result(
+        for endpoint, is_v2 in endpoints:
+            endpoint_matches = []
+            local_filter = bool(openreview_status or (exact_title and not is_v2))
+            page_size = min(max(limit * 2, 20), 100) if local_filter else limit
+            params = {"limit": page_size, "source": "forum", "cache": "true"}
+            if exact_title and is_v2:
+                params.update({"term": query, "type": "exact", "content": "title"})
+            else:
+                params["query"] = query
+            for offset in range(0, 1000, page_size):
+                page_params = {**params, "offset": offset} if offset else params
+                result = _safe(
+                    lambda endpoint=endpoint, page_params=page_params: _result(
+                        "openreview",
+                        endpoint,
+                        _get_json(endpoint, page_params, headers),
+                    ),
                     "openreview",
                     endpoint,
-                    _get_json(endpoint, {"query": query, "limit": limit, "source": "forum"}, headers),
-                ),
-                "openreview",
-                endpoint,
-            )
-            if result["status"] == "ok":
-                matches.extend(result.get("response", {}).get("notes", []))
-            else:
-                errors.append(result.get("error", endpoint))
+                )
+                if result["status"] != "ok":
+                    errors.append(result.get("error", endpoint))
+                    break
+                notes = result.get("response", {}).get("notes", [])
+                matches.extend(notes)
+                endpoint_matches.extend(notes)
+                if not local_filter or len(notes) < page_size:
+                    break
+                eligible = endpoint_matches
+                if exact_title:
+                    wanted = _normalized_title(query)
+                    eligible = [
+                        note for note in eligible if _normalized_title(_content_value(note, "title")) == wanted
+                    ]
+                if openreview_status:
+                    eligible = [note for note in eligible if _openreview_status(note) == openreview_status]
+                eligible_ids = {note.get("forum") or note.get("id") for note in eligible}
+                if len(eligible_ids) >= limit:
+                    break
         if not matches and errors:
-            return _result("openreview", endpoints[0], error="; ".join(errors))
+            return _result("openreview", endpoints[0][0], error="; ".join(errors))
         unique = {}
         for note in matches:
             unique[note.get("forum") or note.get("id") or json.dumps(note, sort_keys=True)] = note
+        selected = list(unique.values())
+        if exact_title:
+            wanted = _normalized_title(query)
+            selected = [note for note in selected if _normalized_title(_content_value(note, "title")) == wanted]
+        if openreview_status:
+            selected = [note for note in selected if _openreview_status(note) == openreview_status]
         return _result(
             "openreview",
-            endpoints[0],
-            {"query": query, "matches": list(unique.values())[:limit], "api_endpoints": list(endpoints)},
+            endpoints[0][0],
+            {
+                "query": query,
+                "matches": selected[:limit],
+                "api_endpoints": [endpoint for endpoint, _ in endpoints],
+            },
         )
     if source == "s2":
         url = "https://api.semanticscholar.org/graph/v1/paper/search"

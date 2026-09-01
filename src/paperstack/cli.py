@@ -945,7 +945,17 @@ def _run_paper(a: argparse.Namespace) -> int:
             )
             if selected
         ]
+        openreview_filters = [
+            flag
+            for flag, selected in (
+                ("--exact-title", a.exact_title),
+                ("--openreview-status", a.openreview_status),
+            )
+            if selected
+        ]
         try:
+            if a.source != "openreview" and openreview_filters:
+                die(f"--source openreview is required for {', '.join(openreview_filters)}")
             if a.source == "arxiv":
                 from . import arxiv
 
@@ -980,7 +990,14 @@ def _run_paper(a: argparse.Namespace) -> int:
                     requirements.append(f"--source arxiv is required for {', '.join(arxiv_filters)}")
                 if requirements:
                     die("; ".join(requirements))
-                result = metadata.search(a.source, a.query, limit=a.limit, local_only=offline)
+                result = metadata.search(
+                    a.source,
+                    a.query,
+                    limit=a.limit,
+                    local_only=offline,
+                    exact_title=a.exact_title,
+                    openreview_status=a.openreview_status,
+                )
         except credentials.CredentialsError as exc:
             die(f"configuration failed: {exc}")
         except RuntimeError as exc:
@@ -1193,6 +1210,12 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s.add_argument("--date-from", help="earliest arXiv submission date")
     s.add_argument("--date-to", help="latest arXiv submission date")
     s.add_argument("--sort", choices=("relevance", "date"), default="relevance")
+    s.add_argument("--exact-title", action="store_true", help="require a normalized exact OpenReview title")
+    s.add_argument(
+        "--openreview-status",
+        choices=("submission", "accepted", "withdrawn"),
+        help="filter OpenReview forum records by inferred status",
+    )
     _output(s)
     _offline(s)
     for command in ("authors", "citations", "references"):

@@ -207,6 +207,12 @@ def test_request_retries_rate_limits(monkeypatch):
     assert len(attempts) == 3
 
 
+def test_retry_delay_honors_retry_after():
+    error = urllib.error.HTTPError("https://example.test", 429, "limited", {"Retry-After": "17"}, None)
+
+    assert metadata._retry_delay(error, 0) == 17
+
+
 def test_unauthenticated_s2_rate_limit_suggests_configured_key(monkeypatch):
     def rate_limited(request, timeout):
         raise urllib.error.HTTPError(request.full_url, 429, "rate limited", {}, None)
@@ -259,6 +265,126 @@ def test_openreview_uses_exact_id_search(monkeypatch):
 
     assert result["status"] == "ok"
     assert requests[0][1]["ids"] == ["paper-id"]
+
+
+def test_openreview_exact_title_and_status_filter(monkeypatch):
+    notes = [
+        {
+            "id": "accepted",
+            "forum": "accepted",
+            "content": {
+                "title": {"value": "ViCTOR: Visual Token Compression"},
+                "venue": {"value": "ICLR 2026 Conference"},
+            },
+        },
+        {
+            "id": "unrelated",
+            "forum": "unrelated",
+            "content": {"title": {"value": "Compound Tokens"}},
+        },
+    ]
+    requests = []
+
+    def get_json(url, params=None, headers=None):
+        requests.append((url, params))
+        return {"notes": notes}
+
+    monkeypatch.setattr(metadata, "_get_json", get_json)
+
+    result = metadata.search(
+        "openreview",
+        "ViCTOR - Visual Token Compression",
+        exact_title=True,
+        openreview_status="accepted",
+    )
+
+    assert [note["id"] for note in result["response"]["matches"]] == ["accepted"]
+    assert requests[0][1] == {
+        "limit": 20,
+        "source": "forum",
+        "cache": "true",
+        "term": "ViCTOR - Visual Token Compression",
+        "type": "exact",
+        "content": "title",
+    }
+
+
+def test_openreview_status_filter_paginates_before_truncating(monkeypatch):
+    requests = []
+
+    def get_json(url, params=None, headers=None):
+        requests.append(params or {})
+        if (params or {}).get("offset", 0) == 0:
+            return {"notes": [{"id": str(index), "forum": str(index), "content": {}} for index in range(20)]}
+        return {
+            "notes": [
+                {
+                    "id": "accepted",
+                    "forum": "accepted",
+                    "content": {"decision": {"value": "Accept"}},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(metadata, "_get_json", get_json)
+
+    result = metadata.search("openreview", "fixture", limit=1, openreview_status="accepted")
+
+    assert result["response"]["matches"][0]["id"] == "accepted"
+    assert requests[1]["offset"] == 20
+
+
+def test_openreview_v1_paginates_until_exact_title_match(monkeypatch):
+    requests = []
+
+    def get_json(url, params=None, headers=None):
+        requests.append((url, params or {}))
+        if "api2" in url:
+            return {"notes": []}
+        if (params or {}).get("offset", 0) == 0:
+            return {
+                "notes": [
+                    {"id": str(index), "forum": str(index), "content": {"title": "Partial match"}}
+                    for index in range(20)
+                ]
+            }
+        return {"notes": [{"id": "exact", "forum": "exact", "content": {"title": "Exact Title"}}]}
+
+    monkeypatch.setattr(metadata, "_get_json", get_json)
+
+    result = metadata.search("openreview", "Exact Title", limit=1, exact_title=True)
+
+    assert result["response"]["matches"][0]["id"] == "exact"
+    assert requests[-1][1]["offset"] == 20
+
+
+def test_openreview_request_does_not_require_writable_cache(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b"ok"
+
+    monkeypatch.setattr(metadata.Path, "mkdir", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("read only")))
+    monkeypatch.setattr(metadata.urllib.request, "urlopen", lambda request, timeout: Response())
+
+    assert metadata.request("https://api2.openreview.net/notes/search") == b"ok"
+
+
+@pytest.mark.parametrize(
+    ("note", "status"),
+    [
+        ({"invitations": ["Venue/-/Withdrawn_Submission"]}, "withdrawn"),
+        ({"content": {"decision": {"value": "Accept (Poster)"}}}, "accepted"),
+        ({"id": "paper", "forum": "paper", "content": {}}, "submission"),
+    ],
+)
+def test_openreview_status_inference(note, status):
+    assert metadata._openreview_status(note) == status
 
 
 def test_offline_dblp_metadata_miss_does_not_use_network(monkeypatch):
