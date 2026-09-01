@@ -34,7 +34,9 @@ and the nearest `.env` take priority over the user credential store.
 - Use `paperstack index dblp ...` for the optional local DBLP index.
 - Use `paperstack viewer ...` to build or serve the selected corpus.
 
-Do not present an authored review as source metadata or an external record as an editorial judgment. Prefer scoped `--json` output when another command or agent will consume the result. Use `--offline` when the user requires no network access.
+Do not present an authored review as source metadata or an external record as an editorial judgment. Prefer
+`--normalized-json` when combining metadata sources and `--json` when the complete provider response is required.
+Use `--offline` when the user requires no network access.
 
 ## Read and inspect
 
@@ -45,6 +47,7 @@ paperstack review search "flow matching"
 paperstack review show arxiv:2410.24164 --json
 paperstack review list --quality good --tag vla
 paperstack paper metadata arxiv:2106.09685
+paperstack paper metadata arxiv:2106.09685 --normalized-json
 paperstack paper search "Exact Paper Title" --source openreview --exact-title
 paperstack paper search "flow matching robotics" --source semantic-scholar --year 2024-2026
 paperstack paper search 'ti:"flow matching"' --source arxiv --category cs.RO --sort date

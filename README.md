@@ -114,6 +114,7 @@ These commands use external source records and do not select a citation or make 
 paperstack paper search "Attention Is All You Need" --source dblp
 paperstack paper search "Exact Paper Title" --source openreview --exact-title --openreview-status accepted
 paperstack paper search "robot learning" --source semantic-scholar --year 2024-2026
+paperstack paper search "robot learning" --source semantic-scholar --normalized-json
 paperstack paper search 'ti:"robot learning"' --source arxiv --category cs.RO --sort date
 paperstack paper metadata arxiv:2106.09685
 paperstack paper metadata doi:10.1109/CVPR.2016.90 --source crossref
@@ -129,6 +130,11 @@ reference. `authors`, `citations`, and `references` use Semantic Scholar and als
 `pmid:`, and `mag:` identifiers. Structured commands expose scoped `--json` flags; networked commands expose scoped
 `--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
 of a work should be cited.
+
+Use `--normalized-json` on `metadata` or `search` for a stable `{status, papers, errors}` envelope. Each paper has
+`title`, `authors`, `year`, `venue`, `publication_status`, `source`, `source_id`, and `source_url`; use `--json` when
+the provider's complete raw response is required. Publication status describes that source record, not a resolved
+claim about every version of the work.
 
 OpenReview exact-title search uses its title-only exact mode and verifies a normalized title match locally. Status
 filtering is conservative because venues encode decisions and withdrawals differently; Paperstack infers it from

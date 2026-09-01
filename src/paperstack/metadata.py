@@ -372,6 +372,152 @@ def fetch_all(
     return results
 
 
+def _value(value):
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    if isinstance(value, list):
+        return value[0] if value else None
+    return value
+
+
+def _names(value, source: str) -> list[str]:
+    if isinstance(value, dict) and "value" in value:
+        value = value["value"]
+    value = value or []
+    if isinstance(value, str):
+        return [name.strip() for name in value.split(" and ") if name.strip()]
+    if isinstance(value, dict) and "author" in value:
+        return _names(value["author"], source)
+    names = []
+    for author in value if isinstance(value, list) else [value]:
+        if isinstance(author, str):
+            names.append(author)
+        elif source == "crossref":
+            name = " ".join(part for part in (author.get("given"), author.get("family")) if part)
+            if name:
+                names.append(name)
+        elif isinstance(author, dict) and (name := author.get("name") or author.get("text")):
+            names.append(str(name))
+    return names
+
+
+def _year(value) -> int | None:
+    value = _value(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, dict) and (parts := value.get("date-parts")):
+        return int(parts[0][0]) if parts and parts[0] else None
+    match = re.search(r"\b(?:19|20)\d{2}\b", str(value or ""))
+    return int(match.group()) if match else None
+
+
+def _source_records(result: dict) -> list[dict]:
+    response = result.get("response") or {}
+    source = result.get("source")
+    if bibtex := response.get("bibtex"):
+        from . import dblp_index
+
+        return [
+            {
+                "key": dblp_index._key(bibtex),
+                "title": dblp_index._field(bibtex, "title"),
+                "authors": dblp_index._field(bibtex, "author"),
+                "year": dblp_index._field(bibtex, "year"),
+                "venue": dblp_index._field(bibtex, "booktitle") or dblp_index._field(bibtex, "journal"),
+                "doi": dblp_index._field(bibtex, "doi"),
+                "url": dblp_index._field(bibtex, "url"),
+            }
+        ]
+    if source == "semantic_scholar":
+        return response.get("data", []) if "data" in response else [response]
+    if source == "crossref":
+        return response.get("message", {}).get("items", []) if "message" in response else [response]
+    if source == "dblp":
+        if "matches" in response:
+            return response["matches"]
+        hits = response.get("result", {}).get("hits", {}).get("hit", [])
+        return [hit.get("info", {}) for hit in hits]
+    if source == "openreview":
+        return response.get("matches", response.get("notes", []))
+    if source == "arxiv":
+        return response.get("matches", [response])
+    return []
+
+
+def _normalized_paper(source: str, record: dict, source_url: str | None) -> dict:
+    content = (record.get("content") or {}) if source == "openreview" else record
+    if source == "openreview":
+        content = {key: _value(value) for key, value in content.items()}
+    title = _value(content.get("title"))
+    venue = _value(
+        content.get("venue")
+        or content.get("venueid")
+        or content.get("booktitle")
+        or content.get("journal")
+        or content.get("container-title")
+    )
+    if isinstance(venue, dict):
+        venue = venue.get("name") or venue.get("value")
+    source_id = {
+        "semantic_scholar": content.get("paperId"),
+        "crossref": content.get("DOI"),
+        "dblp": content.get("dblp_key") or content.get("key"),
+        "openreview": record.get("forum") or record.get("id"),
+        "arxiv": content.get("id"),
+        "acl_anthology": content.get("key") or content.get("doi"),
+    }.get(source)
+    status = {
+        "arxiv": "preprint",
+        "dblp": "published",
+        "crossref": "published",
+        "acl_anthology": "published",
+    }.get(source, "unknown")
+    if source == "semantic_scholar":
+        types = content.get("publicationTypes") or []
+        status = "published" if types else "preprint" if (content.get("externalIds") or {}).get("ArXiv") else "unknown"
+    if source == "openreview":
+        inferred = _openreview_status(record)
+        status = "accepted" if inferred == "accepted" else inferred
+    return {
+        "title": title,
+        "authors": _names(content.get("authors") or content.get("author"), source),
+        "year": _year(content.get("year") or content.get("published") or content.get("publicationDate")),
+        "venue": venue,
+        "publication_status": status,
+        "source": source,
+        "source_id": source_id,
+        "source_url": (
+            content.get("url")
+            or (
+                f"https://www.semanticscholar.org/paper/{source_id}"
+                if source == "semantic_scholar" and source_id
+                else None
+            )
+            or source_url
+        ),
+    }
+
+
+def normalize_results(results: list[dict] | dict) -> dict:
+    items = results if isinstance(results, list) else [results]
+    papers = []
+    errors = []
+    for result in items:
+        if result.get("status") != "ok":
+            errors.append(
+                {
+                    "source": result.get("source"),
+                    "status": result.get("status", "error"),
+                    "message": result.get("error") or result.get("reason"),
+                }
+            )
+            continue
+        records = _source_records(result)
+        papers.extend(_normalized_paper(result["source"], record, result.get("url")) for record in records)
+    status = "ok" if not errors else "partial" if papers else "error"
+    return {"status": status, "papers": papers, "errors": errors}
+
+
 def _content_value(note: dict, name: str):
     value = (note.get("content") or {}).get(name)
     return value.get("value") if isinstance(value, dict) and "value" in value else value

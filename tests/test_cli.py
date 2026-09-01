@@ -58,6 +58,51 @@ def test_paper_interface_is_flat_and_source_oriented(monkeypatch, capsys):
     assert "semantic-scholar" in search
     assert "--category" in search
     assert "--year" in search
+    assert "--normalized-json" in search
+
+
+def test_normalized_json_is_mutually_exclusive_with_raw_json(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["paperstack", "paper", "search", "fixture", "--json", "--normalized-json"],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 2
+
+
+def test_search_prints_normalized_json(monkeypatch, capsys):
+    monkeypatch.setattr(
+        metadata,
+        "search",
+        lambda *args, **kwargs: {
+            "source": "crossref",
+            "url": "https://api.crossref.org/works",
+            "status": "ok",
+            "response": {"message": {"items": [{"DOI": "10.1/example", "title": ["Fixture"]}]}},
+        },
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "paperstack",
+            "paper",
+            "search",
+            "fixture",
+            "--source",
+            "crossref",
+            "--normalized-json",
+        ],
+    )
+
+    assert cli.main() == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "ok"
+    assert output["papers"][0]["source_id"] == "10.1/example"
 
 
 @pytest.mark.parametrize("source", ["dblp", "crossref", "openreview"])

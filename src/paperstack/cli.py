@@ -483,8 +483,11 @@ def show(e: dict, brief: bool) -> None:
             print(body[cut:])
 
 
-def _output(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--json", action="store_true", help="machine-readable output")
+def _output(parser: argparse.ArgumentParser, *, normalized: bool = False) -> None:
+    group = parser.add_mutually_exclusive_group() if normalized else parser
+    group.add_argument("--json", action="store_true", help="machine-readable source response")
+    if normalized:
+        group.add_argument("--normalized-json", action="store_true", help="common paper records across sources")
 
 
 def _offline(parser: argparse.ArgumentParser) -> None:
@@ -922,7 +925,10 @@ def _run_paper(a: argparse.Namespace) -> int:
             die(f"configuration failed: {exc}")
         except RuntimeError as exc:
             die(f"DBLP index lookup failed: {exc}")
-        metadata.print_results(results, json_output=a.json)
+        if a.normalized_json:
+            metadata.print_results(metadata.normalize_results(results), json_output=True)
+        else:
+            metadata.print_results(results, json_output=a.json)
         return 0 if any(item["status"] == "ok" for item in results) else 1
     if a.paper_cmd == "search":
         semantic_filters = [
@@ -1004,7 +1010,10 @@ def _run_paper(a: argparse.Namespace) -> int:
             die(f"DBLP index lookup failed: {exc}")
         except ValueError as exc:
             die(f"paper search failed: {exc}")
-        metadata.print_results(result, json_output=a.json)
+        if a.normalized_json:
+            metadata.print_results(metadata.normalize_results(result), json_output=True)
+        else:
+            metadata.print_results(result, json_output=a.json)
         return 0 if result["status"] == "ok" else 1
 
     try:
@@ -1192,7 +1201,7 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         choices=("all", "semantic-scholar", "dblp", "crossref", "openreview", "acl-anthology", "arxiv"),
         default="all",
     )
-    _output(s)
+    _output(s, normalized=True)
     _offline(s)
     s = paper_sub.add_parser("search", help="search one metadata source")
     s.add_argument("query", help="paper title or other source-specific search text")
@@ -1216,7 +1225,7 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         choices=("submission", "accepted", "withdrawn"),
         help="filter OpenReview forum records by inferred status",
     )
-    _output(s)
+    _output(s, normalized=True)
     _offline(s)
     for command in ("authors", "citations", "references"):
         s = paper_sub.add_parser(command, help=f"inspect Semantic Scholar {command}")

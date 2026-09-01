@@ -79,6 +79,156 @@ def test_s2_search_requests_citation_fields(monkeypatch):
     assert {"citationCount", "influentialCitationCount", "referenceCount"} <= fields
 
 
+def test_normalized_results_use_stable_envelope_and_record_shape():
+    result = metadata.normalize_results(
+        [
+            {
+                "source": "semantic_scholar",
+                "url": "https://api.example/paper",
+                "status": "ok",
+                "response": {
+                    "paperId": "s2-id",
+                    "externalIds": {"ArXiv": "2401.00001"},
+                    "title": "Fixture",
+                    "authors": [{"name": "Ada Lovelace"}],
+                    "year": 2024,
+                },
+            },
+            {"source": "crossref", "status": "unavailable", "reason": "no DOI"},
+        ]
+    )
+
+    assert result == {
+        "status": "partial",
+        "papers": [
+            {
+                "title": "Fixture",
+                "authors": ["Ada Lovelace"],
+                "year": 2024,
+                "venue": None,
+                "publication_status": "preprint",
+                "source": "semantic_scholar",
+                "source_id": "s2-id",
+                "source_url": "https://www.semanticscholar.org/paper/s2-id",
+            }
+        ],
+        "errors": [{"source": "crossref", "status": "unavailable", "message": "no DOI"}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        (
+            {
+                "source": "arxiv",
+                "url": "https://arxiv.org/abs/2401.00001",
+                "status": "ok",
+                "response": {
+                    "matches": [
+                        {
+                            "id": "2401.00001",
+                            "title": "ArXiv paper",
+                            "authors": ["A. Author", "B. Author"],
+                            "published": "2024-01-02T00:00:00Z",
+                        }
+                    ]
+                },
+            },
+            ("arxiv", "2401.00001", "preprint", 2024),
+        ),
+        (
+            {
+                "source": "crossref",
+                "url": "https://api.crossref.org/works",
+                "status": "ok",
+                "response": {
+                    "message": {
+                        "items": [
+                            {
+                                "DOI": "10.1/example",
+                                "title": ["Published paper"],
+                                "author": [{"given": "A.", "family": "Author"}],
+                                "published": {"date-parts": [[2025, 1, 2]]},
+                            }
+                        ]
+                    }
+                },
+            },
+            ("crossref", "10.1/example", "published", 2025),
+        ),
+        (
+            {
+                "source": "dblp",
+                "url": "https://dblp.org/search/publ/api",
+                "status": "ok",
+                "response": {
+                    "result": {
+                        "hits": {
+                            "hit": [
+                                {
+                                    "info": {
+                                        "key": "conf/test/Paper25",
+                                        "title": "DBLP paper",
+                                        "authors": {"author": [{"text": "A. Author"}]},
+                                        "year": "2025",
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                },
+            },
+            ("dblp", "conf/test/Paper25", "published", 2025),
+        ),
+    ],
+)
+def test_normalized_results_adapt_provider_shapes(result, expected):
+    paper = metadata.normalize_results(result)["papers"][0]
+
+    assert (paper["source"], paper["source_id"], paper["publication_status"], paper["year"]) == expected
+    if paper["source"] == "arxiv":
+        assert paper["authors"] == ["A. Author", "B. Author"]
+
+
+def test_normalized_results_parse_direct_bibtex_metadata():
+    result = metadata.normalize_results(
+        {
+            "source": "acl_anthology",
+            "url": "https://aclanthology.org/P25-1001.bib",
+            "status": "ok",
+            "response": {
+                "bibtex": """@inproceedings{P25-1001,
+  title = {Fixture},
+  author = {A. Author and B. Author},
+  booktitle = {ACL},
+  year = {2025}
+}"""
+            },
+        }
+    )
+
+    assert result["papers"][0]["source_id"] == "P25-1001"
+    assert result["papers"][0]["authors"] == ["A. Author", "B. Author"]
+
+
+def test_normalized_results_extract_semantic_scholar_journal_name():
+    result = metadata.normalize_results(
+        {
+            "source": "semantic_scholar",
+            "status": "ok",
+            "response": {
+                "paperId": "s2-id",
+                "title": "Fixture",
+                "journal": {"name": "Journal of Tests", "volume": "1"},
+                "publicationTypes": ["JournalArticle"],
+            },
+        }
+    )
+
+    assert result["papers"][0]["venue"] == "Journal of Tests"
+
+
 @pytest.mark.parametrize(
     ("source", "parameter"),
     [("dblp", "h"), ("crossref", "rows"), ("openreview", "limit"), ("s2", "limit")],
