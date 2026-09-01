@@ -99,15 +99,23 @@ def test_search_passes_limit_to_remote_source(monkeypatch, source, parameter):
     assert requests[0][parameter] == 5
 
 
-def test_dblp_search_sanitizes_title_colon(monkeypatch):
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("ViCA: Efficient Multimodal LLMs", "ViCA Efficient Multimodal LLMs"),
+        ("Ratios 1:1: Efficient Matching", "Ratios 1:1 Efficient Matching"),
+        ("title: Efficient Matching", "title Efficient Matching"),
+    ],
+)
+def test_dblp_search_sanitizes_title_colon(monkeypatch, query, expected):
     requested = {}
     monkeypatch.setattr(dblp_index, "search", lambda query, limit: [])
     monkeypatch.setattr(metadata, "_get_json", lambda url, params=None, headers=None: requested.update(params or {}))
 
-    result = metadata.search("dblp", "ViCA: Efficient Multimodal LLMs", limit=5)
+    result = metadata.search("dblp", query, limit=5)
 
     assert result["status"] == "ok"
-    assert requested["q"] == "ViCA Efficient Multimodal LLMs"
+    assert requested["q"] == expected
 
 
 def test_dblp_search_preserves_source_tokens(monkeypatch):
@@ -115,9 +123,9 @@ def test_dblp_search_preserves_source_tokens(monkeypatch):
     monkeypatch.setattr(dblp_index, "search", lambda query, limit: [])
     monkeypatch.setattr(metadata, "_get_json", lambda url, params=None, headers=None: requested.update(params or {}))
 
-    metadata.search("dblp", "venue:NeurIPS: year:2025:")
+    metadata.search("dblp", "author:Michael Ley: title:Data Mining:")
 
-    assert requested["q"] == "venue:NeurIPS: year:2025:"
+    assert requested["q"] == "author:Michael Ley: title:Data Mining:"
 
 
 def test_legacy_arxiv_search_passes_limit(monkeypatch):

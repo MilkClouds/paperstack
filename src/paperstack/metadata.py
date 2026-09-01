@@ -324,8 +324,8 @@ def search(source: str, query: str, *, limit: int = 10, local_only: bool = False
                 "reason": "not found in local index",
             }
         url = "https://dblp.org/search/publ/api"
-        has_search_token = re.search(r"(?:^|\s)[A-Za-z]+:[^\s:]+:", query)
-        remote_query = query if has_search_token else re.sub(r":\s+", " ", query)
+        has_field_token = re.search(r"(?:^|\s)(?:author|title|venue|year|type|stream|toc):[^:]+:", query)
+        remote_query = query if has_field_token else re.sub(r":\s+", " ", query)
         return _safe(
             lambda: _result("dblp", url, _get_json(url, {"q": remote_query, "format": "json", "h": limit})),
             "dblp",
