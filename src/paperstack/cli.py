@@ -1075,6 +1075,23 @@ def _run_index(a: argparse.Namespace) -> int:
     return 0
 
 
+def _run_bib(a: argparse.Namespace) -> int:
+    from . import bibtex
+
+    try:
+        result = bibtex.lint(a.path, a.style)
+    except (TypeError, ValueError) as exc:
+        die(f"bibliography lint failed: {exc}")
+    if a.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        for issue in result["issues"]:
+            key = f" [{issue['key']}]" if issue.get("key") else ""
+            print(f"{a.path}:{issue['line']}:{key} {issue['code']}: {issue['message']}")
+        print(f"{result['entries']} entries, {len(result['issues'])} issues")
+    return 0 if result["status"] == "ok" else 1
+
+
 def _run_viewer(a: argparse.Namespace) -> int:
     from . import viewer
 
@@ -1215,6 +1232,13 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s.add_argument("paper_ref", help="arxiv: reference")
     _offline(s)
 
+    bib = sub.add_parser("bib", help="read-only bibliography checks")
+    bib_sub = bib.add_subparsers(dest="bib_cmd", required=True)
+    s = bib_sub.add_parser("lint", help="validate BibTeX structure and style rules")
+    s.add_argument("path", type=Path)
+    s.add_argument("--style", type=Path, help="bibstyle.toml rule file")
+    _output(s)
+
     index = sub.add_parser("index", help="optional local lookup indexes")
     index_sub = index.add_subparsers(dest="index_cmd", required=True)
     dblp = index_sub.add_parser("dblp", help="selected-venue DBLP index")
@@ -1248,6 +1272,8 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         return _run_viewer(a)
     if a.cmd == "paper":
         return _run_paper(a)
+    if a.cmd == "bib":
+        return _run_bib(a)
     if a.cmd == "index":
         return _run_index(a)
     return _run_review(a)

@@ -129,6 +129,33 @@ reference. `authors`, `citations`, and `references` use Semantic Scholar and als
 `--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
 of a work should be cited.
 
+Lint an existing bibliography without modifying it:
+
+```bash
+paperstack bib lint docs/references.bib --style bibstyle.toml
+```
+
+```toml
+[authors]
+max = 6
+
+[citation_keys]
+pattern = "^[A-Za-z][A-Za-z0-9]+$"
+
+[fields.required]
+all = ["title", "author", "year"]
+inproceedings = ["booktitle"]
+
+[venues]
+allowed = ["CVPR", "ECCV", "ICCV"]
+
+[provenance]
+required = true
+```
+
+Provenance uses a `% source:` or `% provenance:` comment immediately before an entry. Lint also reports malformed
+entries and duplicate keys. It does not make network-backed publication claims or rewrite the bibliography.
+
 ## Build a viewer
 
 ```bash

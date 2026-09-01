@@ -31,6 +31,7 @@ and the nearest `.env` take priority over the user credential store.
 
 - Use `paperstack review ...` for authored entries and editorial judgments.
 - Use `paperstack paper ...` for external metadata, search results, arXiv source, and PDFs.
+- Use `paperstack bib lint ...` for read-only BibTeX and `bibstyle.toml` checks.
 - Use `paperstack index dblp ...` for the optional local DBLP index.
 - Use `paperstack viewer ...` to build or serve the selected corpus.
 
@@ -51,6 +52,7 @@ paperstack paper citations arxiv:2106.09685 --limit 50
 paperstack paper references arxiv:2106.09685 --limit 50
 paperstack paper read arxiv:2106.09685 --outline
 paperstack paper read arxiv:2106.09685 --section 3
+paperstack bib lint docs/references.bib --style bibstyle.toml
 ```
 
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.

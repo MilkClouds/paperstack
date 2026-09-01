@@ -20,8 +20,8 @@ def _help(monkeypatch, capsys, *args):
 def test_top_level_exposes_only_command_groups(monkeypatch, capsys):
     output = _help(monkeypatch, capsys)
 
-    assert "{corpus,config,viewer,review,paper,index}" in output
-    assert "{corpus,config,viewer,review,paper,index,show" not in output
+    assert "{corpus,config,viewer,review,paper,bib,index}" in output
+    assert "{corpus,config,viewer,review,paper,bib,index,show" not in output
     assert "paperstack corpus add" in output
     assert "Use `corpus` to select authored data" in output
 
@@ -58,6 +58,17 @@ def test_paper_interface_is_flat_and_source_oriented(monkeypatch, capsys):
     assert "semantic-scholar" in search
     assert "--category" in search
     assert "--year" in search
+
+
+def test_bib_lint_is_read_only_and_style_driven(monkeypatch, capsys, tmp_path):
+    bibliography = tmp_path / "references.bib"
+    bibliography.write_text("@article{key, title={Fixture}}", encoding="utf-8")
+    before = bibliography.read_bytes()
+    monkeypatch.setattr(sys, "argv", ["paperstack", "bib", "lint", str(bibliography), "--json"])
+
+    assert cli.main() == 0
+    assert json.loads(capsys.readouterr().out)["entries"] == 1
+    assert bibliography.read_bytes() == before
 
 
 @pytest.mark.parametrize("source", ["dblp", "crossref", "openreview"])
