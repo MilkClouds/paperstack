@@ -79,6 +79,68 @@ def test_s2_search_requests_citation_fields(monkeypatch):
     assert {"citationCount", "influentialCitationCount", "referenceCount"} <= fields
 
 
+@pytest.mark.parametrize(
+    ("source", "parameter"),
+    [("dblp", "h"), ("crossref", "rows"), ("openreview", "limit"), ("s2", "limit")],
+)
+def test_search_passes_limit_to_remote_source(monkeypatch, source, parameter):
+    requests = []
+
+    def get_json(url, params=None, headers=None):
+        requests.append(params or {})
+        return {"notes": []} if source == "openreview" else {"data": []}
+
+    monkeypatch.setattr(metadata, "_get_json", get_json)
+    monkeypatch.setattr(dblp_index, "search", lambda query, limit: [])
+
+    result = metadata.search(source, " fixture ", limit=5)
+
+    assert result["status"] == "ok"
+    assert requests[0][parameter] == 5
+
+
+def test_dblp_search_sanitizes_title_colon(monkeypatch):
+    requested = {}
+    monkeypatch.setattr(dblp_index, "search", lambda query, limit: [])
+    monkeypatch.setattr(metadata, "_get_json", lambda url, params=None, headers=None: requested.update(params or {}))
+
+    result = metadata.search("dblp", "ViCA: Efficient Multimodal LLMs", limit=5)
+
+    assert result["status"] == "ok"
+    assert requested["q"] == "ViCA Efficient Multimodal LLMs"
+
+
+def test_dblp_search_preserves_source_tokens(monkeypatch):
+    requested = {}
+    monkeypatch.setattr(dblp_index, "search", lambda query, limit: [])
+    monkeypatch.setattr(metadata, "_get_json", lambda url, params=None, headers=None: requested.update(params or {}))
+
+    metadata.search("dblp", "venue:NeurIPS: year:2025:")
+
+    assert requested["q"] == "venue:NeurIPS: year:2025:"
+
+
+def test_legacy_arxiv_search_passes_limit(monkeypatch):
+    requested = {}
+
+    def get_text(url, params=None):
+        requested.update(params or {})
+        return '<feed xmlns="http://www.w3.org/2005/Atom" />'
+
+    monkeypatch.setattr(metadata, "_get_text", get_text)
+
+    result = metadata.search("arxiv", "fixture", limit=5)
+
+    assert result["status"] == "ok"
+    assert requested["max_results"] == 5
+
+
+@pytest.mark.parametrize(("query", "limit"), [(" ", 10), ("fixture", 0), ("fixture", 101)])
+def test_search_rejects_invalid_common_arguments(query, limit):
+    with pytest.raises(ValueError):
+        metadata.search("crossref", query, limit=limit)
+
+
 def test_unavailable_source_is_reported(monkeypatch):
     monkeypatch.setattr(metadata, "resolve_s2", lambda ref: {"source": "semantic_scholar", "status": "error"})
 

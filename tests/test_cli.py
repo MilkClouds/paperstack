@@ -60,6 +60,40 @@ def test_paper_interface_is_flat_and_source_oriented(monkeypatch, capsys):
     assert "--year" in search
 
 
+@pytest.mark.parametrize("source", ["dblp", "crossref", "openreview"])
+def test_search_limit_is_common_to_metadata_sources(monkeypatch, capsys, source):
+    calls = []
+    monkeypatch.setattr(
+        metadata,
+        "search",
+        lambda selected, query, **kwargs: (
+            calls.append((selected, query, kwargs)) or {"source": selected, "status": "ok"}
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["paperstack", "paper", "search", "fixture", "--source", source, "--limit", "5", "--json"],
+    )
+
+    assert cli.main() == 0
+    assert calls == [(source, "fixture", {"limit": 5, "local_only": False})]
+
+
+def test_search_reports_the_incompatible_filter(monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["paperstack", "paper", "search", "fixture", "--source", "dblp", "--year", "2026"],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 3
+    assert capsys.readouterr().err == "paperstack: --source semantic-scholar is required for --year\n"
+
+
 def test_review_sync_has_no_contradictory_offline_flag(monkeypatch, capsys):
     output = _help(monkeypatch, capsys, "review", "sync")
 

@@ -102,6 +102,20 @@ def test_build_refuses_to_replace_unrelated_directory(tmp_path):
     assert (output / "keep.txt").read_text() == "precious"
 
 
+def test_build_refuses_to_delete_unowned_backup(tmp_path):
+    root = _corpus(tmp_path / "corpus")
+    output = tmp_path / "site"
+    viewer.build(root, output)
+    backup = tmp_path / ".site.backup"
+    backup.mkdir()
+    (backup / "keep.txt").write_text("precious")
+
+    with pytest.raises(ValueError, match="backup is not owned by Paperstack"):
+        viewer.build(root, output)
+
+    assert (backup / "keep.txt").read_text() == "precious"
+
+
 def test_build_refuses_output_inside_authored_entries(tmp_path):
     root = _corpus(tmp_path / "corpus")
 
