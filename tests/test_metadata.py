@@ -2,7 +2,7 @@ import urllib.error
 
 import pytest
 
-from paperstack import dblp_index, metadata
+from paperstack import dblp_index, metadata, tls
 from paperstack.metadata import PaperRef
 
 
@@ -404,3 +404,31 @@ def test_offline_dblp_search_miss_does_not_use_network(monkeypatch):
     result = metadata.search("dblp", "missing title", local_only=True)
 
     assert result["status"] == "no_match"
+
+
+@pytest.mark.parametrize(
+    ("url", "expects_context"),
+    [("https://export.arxiv.org/api/query", True), ("https://api.crossref.org/works", False)],
+)
+def test_request_uses_arxiv_tls_context_only_for_arxiv(monkeypatch, url, expects_context):
+    contexts = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b"ok"
+
+    def open_request(request, timeout, context=None):
+        contexts.append(context)
+        return Response()
+
+    monkeypatch.setattr(metadata.urllib.request, "urlopen", open_request)
+    monkeypatch.setattr(metadata.time, "sleep", lambda seconds: None)
+
+    assert metadata.request(url) == b"ok"
+    assert (contexts[0] is tls.arxiv_context()) is expects_context

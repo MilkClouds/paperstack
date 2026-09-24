@@ -20,6 +20,7 @@ from pathlib import Path
 from filelock import FileLock
 
 from . import credentials
+from .tls import arxiv_context
 
 ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 SOURCES = ("semantic_scholar", "dblp", "crossref", "openreview", "acl_anthology", "arxiv")
@@ -123,6 +124,7 @@ def request(
         **(headers or {}),
     }
     req = urllib.request.Request(url, headers=request_headers, data=data)
+    open_options = {"context": arxiv_context()} if "arxiv.org" in host else {}
     with _request_slot(request_key) as shared_timestamp:
         for attempt in range(3):
             elapsed = min(
@@ -132,7 +134,7 @@ def request(
             if elapsed < interval:
                 time.sleep(interval - elapsed)
             try:
-                with urllib.request.urlopen(req, timeout=30) as response:
+                with urllib.request.urlopen(req, timeout=30, **open_options) as response:
                     _last_request[request_key] = time.monotonic()
                     _mark_request(shared_timestamp)
                     return response.read()

@@ -16,6 +16,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from ..tls import arxiv_context
+
 _CACHE_ROOT = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
 CACHE_DIR = Path(os.environ.get("PAPERSTACK_PAPERS_DIR", _CACHE_ROOT / "paperstack" / "papers"))
 CONVERTER = "pdf-inspector"
@@ -27,7 +29,7 @@ def _fetch(url: str, timeout: int = 60) -> bytes | None:
     req = urllib.request.Request(url, headers={"User-Agent": "paperstack/1.0 (+arxiv pdf fetch)"})
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with urllib.request.urlopen(req, timeout=timeout, context=arxiv_context()) as resp:
                 return resp.read()
         except urllib.error.HTTPError as e:
             if e.code == 429:
