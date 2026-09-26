@@ -325,34 +325,24 @@ def _clean_title(s: str, macros: dict[str, str] | None = None) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-def _load_document(arxiv_id: str, refresh: bool) -> tuple[str, list[dict]]:
-    src = _ensure_source(arxiv_id, refresh)
+def _load_document(arxiv_id: str, refresh: bool, document: str | None = None) -> tuple[str, list[dict]]:
+    src = _ensure_source(arxiv_id, refresh).resolve()
     cands = _tex_candidates(src)
-    scored = []
-    for p in cands:
-        head = _mask_comments(_read(p)[:200_000])
-        if r"\documentclass" not in head:
-            continue
-        flat = _flatten(p, src)
-        if flat is None:
-            continue
-        sections = _find_sections(flat)
-        scored.append((r"\begin{document}" in head, len(sections), -len(p.parts), flat, sections))
-    if not scored:  # Fall back when no file declares a document class.
-        for p in cands:
-            flat = _flatten(p, src)
-            if flat is None:
-                continue
-            sections = _find_sections(flat)
-            scored.append((False, len(sections), -len(p.parts), flat, sections))
-    if not scored:
+    roots = [p for p in cands if r"\documentclass" in _mask_comments(_read(p)[:200_000])]
+    if document:
+        selected = (src / document).resolve()
+        if not selected.is_relative_to(src.resolve()) or selected not in [p.resolve() for p in cands]:
+            sys.exit(f"unknown source document: {document}")
+        cands = [selected]
+    elif len(roots or cands) > 1:
+        names = ", ".join(str(p.relative_to(src)) for p in (roots or cands))
+        sys.exit(f"multiple source documents: {names}; select --document (inspect each supplement separately)")
+    selected = cands[0] if document else (roots or cands)[0] if cands else None
+    flat = _flatten(selected, src) if selected else None
+    if flat is None:
         sys.exit(f"{arxiv_id}: no usable .tex file in {src}")
-    best = max(scored, key=lambda t: (t[0], t[1], t[2]))
-    if not best[4]:
-        sys.exit(f"{arxiv_id}: LaTeX source found but no \\section commands in it")
-    masked = _mask_comments(best[3])
-    lo, hi = _body_span(masked)
-    return best[3][lo:hi], best[4]
+    lo, hi = _body_span(_mask_comments(flat))
+    return flat[lo:hi], _find_sections(flat)
 
 
 def _load(arxiv_id: str, refresh: bool) -> list[dict]:
@@ -389,7 +379,12 @@ def cmd_section(args: argparse.Namespace) -> None:
 
 
 def cmd_read(args: argparse.Namespace) -> None:
-    body, sections = _load_document(args.arxiv_id, args.refresh)
+    if getattr(args, "documents", False):
+        src = _ensure_source(args.arxiv_id, args.refresh)
+        for path in _tex_candidates(src):
+            print(path.relative_to(src))
+        return
+    body, sections = _load_document(args.arxiv_id, args.refresh, getattr(args, "document", None))
     if args.outline:
         for section in sections:
             print(f"{section['id']}\t{section['level']}\t{section['title']}")
@@ -428,6 +423,8 @@ def main(argv: list[str]) -> None:
     mode.add_argument("--section", dest="section_id", help="dotted id (3.2) or exact title")
     p_read.add_argument("--max-chars", type=int, default=0, help="0 = all remaining text")
     p_read.add_argument("--start", type=int, default=0)
+    p_read.add_argument("--documents", action="store_true")
+    p_read.add_argument("--document")
     p_read.add_argument("--refresh", action="store_true", help="refetch even if cached")
     p_read.set_defaults(func=cmd_read)
 

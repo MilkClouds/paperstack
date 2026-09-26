@@ -104,7 +104,8 @@ def test_runtime_failure_caches_partial_native_extraction(tmp_path, monkeypatch,
         SimpleNamespace(process_pdf_with_ocr=convert_pdf),
     )
 
-    assert arxiv_pdf.convert("2601.00001") is True
+    assert arxiv_pdf.convert("2601.00001") is False
+    assert arxiv_pdf.convert("2601.00001", allow_partial=True) is True
     meta = json.loads((tmp_path / "2601.00001" / "meta.json").read_text())
     assert meta["conversion_mode"] == "native_fallback"
     assert meta["quality"] == "partial"
@@ -118,6 +119,7 @@ def test_runtime_failure_rejects_a_fully_scanned_pdf(tmp_path, monkeypatch, caps
     monkeypatch.setattr(arxiv_pdf, "_fetch", lambda url: fetches.append(url) or b"%PDF-test")
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     (paper_dir / "paper.pdf").write_bytes(b"%PDF-cached")
 
     def convert_pdf(_path, mode):
@@ -144,6 +146,7 @@ def test_legacy_converter_cache_is_rebuilt(tmp_path, monkeypatch):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
     (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     (paper_dir / "paper.md").write_text("old" * 50)
     (paper_dir / "meta.json").write_text(json.dumps({"converter": "pymupdf4llm"}))
     monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
@@ -161,6 +164,7 @@ def test_legacy_converter_cache_is_rebuilt(tmp_path, monkeypatch):
 def test_corrupt_cached_pdf_is_refetched_once(tmp_path, monkeypatch):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     pdf_path = paper_dir / "paper.pdf"
     pdf_path.write_bytes(b"%PDF-broken")
     fetches = []
@@ -208,6 +212,7 @@ def test_pdf_downloads_use_unique_staging_files(tmp_path, monkeypatch):
 def test_unusable_cached_pdf_output_is_refetched_once(tmp_path, monkeypatch):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     pdf_path = paper_dir / "paper.pdf"
     pdf_path.write_bytes(b"%PDF-truncated")
     fetches = []
@@ -241,6 +246,7 @@ def test_unusable_cached_pdf_output_is_refetched_once(tmp_path, monkeypatch):
 def test_current_converter_cache_does_not_require_the_extra(tmp_path, monkeypatch):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     markdown = "cached" * 20
     encoded = markdown.encode()
     (paper_dir / "paper.md").write_bytes(encoded)
@@ -248,6 +254,8 @@ def test_current_converter_cache_does_not_require_the_extra(tmp_path, monkeypatc
         json.dumps(
             {
                 "converter": "pdf-inspector",
+                "quality": "complete",
+                "pdf_sha256": hashlib.sha256(b"%PDF-test").hexdigest(),
                 "bytes": len(encoded),
                 "sha256": hashlib.sha256(encoded).hexdigest(),
             }
@@ -262,12 +270,15 @@ def test_current_converter_cache_does_not_require_the_extra(tmp_path, monkeypatc
 def test_native_fallback_cache_is_only_terminal_offline(tmp_path):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     markdown = b"partial" * 20
     (paper_dir / "paper.md").write_bytes(markdown)
     (paper_dir / "meta.json").write_text(
         json.dumps(
             {
                 "converter": "pdf-inspector",
+                "quality": "complete",
+                "pdf_sha256": hashlib.sha256(b"%PDF-test").hexdigest(),
                 "conversion_mode": "native_fallback",
                 "bytes": len(markdown),
                 "sha256": hashlib.sha256(markdown).hexdigest(),
@@ -276,18 +287,21 @@ def test_native_fallback_cache_is_only_terminal_offline(tmp_path):
     )
 
     assert arxiv_pdf._cached_conversion(paper_dir) is None
-    assert arxiv_pdf._cached_conversion(paper_dir, allow_native_fallback=True) == paper_dir / "paper.md"
+    assert arxiv_pdf._cached_conversion(paper_dir, allow_partial=True) == paper_dir / "paper.md"
 
 
 def test_current_converter_cache_rejects_mismatched_markdown(tmp_path):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     original = b"original" * 20
     (paper_dir / "paper.md").write_bytes(b"corrupted" * 20)
     (paper_dir / "meta.json").write_text(
         json.dumps(
             {
                 "converter": "pdf-inspector",
+                "quality": "complete",
+                "pdf_sha256": hashlib.sha256(b"%PDF-test").hexdigest(),
                 "bytes": len(original),
                 "sha256": hashlib.sha256(original).hexdigest(),
             }
@@ -300,6 +314,7 @@ def test_current_converter_cache_rejects_mismatched_markdown(tmp_path):
 def test_current_converter_cache_rejects_non_object_metadata(tmp_path):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     (paper_dir / "paper.md").write_text("cached" * 20)
     (paper_dir / "meta.json").write_text("null")
 

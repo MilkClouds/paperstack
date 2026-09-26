@@ -124,11 +124,24 @@ paperstack paper read arxiv:2604.23073 --section 6
 paperstack paper pdf arxiv:2602.09017
 ```
 
-`metadata` accepts `arxiv:`, `doi:`, `dblp:`, and `openreview:` references. `read` and `pdf` require an `arxiv:`
-reference. `authors`, `citations`, and `references` use Semantic Scholar and also accept its `s2:`, `corpus:`, `acl:`,
+`metadata` accepts `arxiv:`, `doi:`, `dblp:`, and `openreview:` references. `read` and `pdf`
+accept arXiv references directly; other identifiers require an explicit primary-source HTTPS `--pdf-url`. `authors`, `citations`, and `references` use Semantic Scholar and also accept its `s2:`, `corpus:`, `acl:`,
 `pmid:`, and `mag:` identifiers. Structured commands expose scoped `--json` flags; networked commands expose scoped
 `--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
 of a work should be cited.
+
+### Source reading
+
+- Pin `arxiv:IDvN` for version-specific downloads and caches. Metadata lookup remains work-level.
+  Unversioned reads may use stale cached content; `--refresh` refetches, `--offline` never does.
+- `read ... --documents` lists source files. Multiple TeX roots require `--document FILE`;
+  inspect relevant supplements separately. `--outline`/`--section` apply to that document.
+- DOI/OpenReview/DBLP reads require `--pdf-url https://...` pointing to the primary PDF.
+  `read` prints Markdown; `pdf` prints its cache path. New conversions need the PDF extra.
+- Partial PDF extraction returns failure unless `--allow-partial` is explicit, even offline.
+  Check `meta.json` and the PDF before using numbers. Converter quality does not certify accuracy.
+- PDF caches verify original and Markdown hashes. Old caches without PDF hashes need rebuilding.
+
 
 OpenReview exact-title search uses its title-only exact mode and verifies a normalized title match locally. Status
 filtering is conservative because venues encode decisions and withdrawals differently; Paperstack infers it from

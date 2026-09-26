@@ -54,6 +54,10 @@ paperstack paper read arxiv:2106.09685 --outline
 paperstack paper read arxiv:2106.09685 --section 3
 ```
 
+Pin `arxiv:IDvN`; use `--documents` and `--document FILE` to inspect separate supplements.
+Non-arXiv reads need a verified `--pdf-url`. Inspect PDF quality metadata before opting into
+`--allow-partial`; check original tables when extraction is ambiguous.
+
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.
 
 Treat paper metadata and citation graphs as source records, not as a selected citation. Do not synthesize BibTeX or
