@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import hashlib
-import json
 import io
 import os
 import re
@@ -339,40 +337,12 @@ def _load_document(arxiv_id: str, refresh: bool, document: str | None = None) ->
     elif len(roots or cands) > 1:
         names = ", ".join(str(p.relative_to(src)) for p in (roots or cands))
         sys.exit(f"multiple source documents: {names}; select --document (inspect each supplement separately)")
-    scored = []
-    for p in cands:
-        head = _mask_comments(_read(p)[:200_000])
-        if r"\documentclass" not in head:
-            continue
-        flat = _flatten(p, src)
-        if flat is None:
-            continue
-        sections = _find_sections(flat)
-        scored.append((r"\begin{document}" in head, len(sections), -len(p.parts), flat, sections, p))
-    if not scored:  # Fall back when no file declares a document class.
-        for p in cands:
-            flat = _flatten(p, src)
-            if flat is None:
-                continue
-            sections = _find_sections(flat)
-            scored.append((False, len(sections), -len(p.parts), flat, sections, p))
-    if not scored:
+    selected = cands[0] if document else (roots or cands)[0] if cands else None
+    flat = _flatten(selected, src) if selected else None
+    if flat is None:
         sys.exit(f"{arxiv_id}: no usable .tex file in {src}")
-    best = max(scored, key=lambda t: (t[0], t[1], t[2]))
-    manifest = {
-        "source_url": f"https://arxiv.org/e-print/{arxiv_id}",
-        "document": str(best[5].relative_to(src)),
-        "selection": "explicit" if document else "automatic",
-        "files": {str(p.relative_to(src)): hashlib.sha256(p.read_bytes()).hexdigest() for p in _tex_candidates(src)},
-        "text_sha256": hashlib.sha256(best[3].encode()).hexdigest(),
-    }
-    print(f"Source: {manifest['source_url']}; flattened SHA256: {manifest['text_sha256']}", file=sys.stderr)
-    # Each selected document gets its own provenance; supplements do not overwrite the main read.
-    digest = hashlib.sha256((document or "automatic").encode()).hexdigest()[:16]
-    (src.parent / f"source-{digest}.json").write_text(json.dumps(manifest, indent=2))
-    masked = _mask_comments(best[3])
-    lo, hi = _body_span(masked)
-    return best[3][lo:hi], best[4]
+    lo, hi = _body_span(_mask_comments(flat))
+    return flat[lo:hi], _find_sections(flat)
 
 
 def _load(arxiv_id: str, refresh: bool) -> list[dict]:

@@ -54,12 +54,9 @@ paperstack paper read arxiv:2106.09685 --outline
 paperstack paper read arxiv:2106.09685 --section 3
 ```
 
-Pin `arxiv:IDvN` for reproducible reads. Use `paper read ... --documents` to inventory
-source files and `--document FILE` when multiple roots or supplements exist. Record the
-source URL and content hash; inspect PDF tables when text layout is ambiguous.
-For non-arXiv content, provide the verified primary-source HTTPS `--pdf-url`; Paperstack
-does not guess a matching paper. Partial PDF extraction fails unless `--allow-partial` is
-explicitly chosen after inspecting quality metadata; partial output is not verified evidence.
+Pin `arxiv:IDvN`; use `--documents` and `--document FILE` to inspect separate supplements.
+Non-arXiv reads need a verified `--pdf-url`. Inspect PDF quality metadata before opting into
+`--allow-partial`; check original tables when extraction is ambiguous.
 
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.
 

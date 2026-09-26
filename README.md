@@ -130,37 +130,18 @@ accept arXiv references directly; other identifiers require an explicit primary-
 `--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
 of a work should be cited.
 
-### Reproducible source reads
+### Source reading
 
-Pin an arXiv version: `paperstack paper read arxiv:2406.09246v1 --outline`.
-Content commands preserve `vN` in both download URLs and cache paths; metadata lookup still
-uses the canonical work identifier. Unversioned reads warn because cached content may be stale.
-Use `--refresh` to replace an online cache; it cannot be combined with `--offline`.
+- Pin `arxiv:IDvN` for version-specific downloads and caches. Metadata lookup remains work-level.
+  Unversioned reads may use stale cached content; `--refresh` refetches, `--offline` never does.
+- `read ... --documents` lists source files. Multiple TeX roots require `--document FILE`;
+  inspect relevant supplements separately. `--outline`/`--section` apply to that document.
+- DOI/OpenReview/DBLP reads require `--pdf-url https://...` pointing to the primary PDF.
+  `read` prints Markdown; `pdf` prints its cache path. New conversions need the PDF extra.
+- Partial PDF extraction returns failure unless `--allow-partial` is explicit, even offline.
+  Check `meta.json` and the PDF before using numbers. Converter quality does not certify accuracy.
+- PDF caches verify original and Markdown hashes. Old caches without PDF hashes need rebuilding.
 
-Use `read ... --documents` to inventory source files. If several independent TeX roots exist,
-Paperstack stops instead of silently choosing one. Read each relevant root with
-`--document main.tex` or `--document supplement.tex`; section IDs belong to that root.
-Source provenance JSON records the requested URL, selection, input hashes and flattened-text
-hash next to `src/`. This inventories available files, not a guarantee that all evidence was read.
-TeX without section headings can still be read in full. Truncation is reported on stderr.
-
-For PDF-only arXiv submissions use `paper pdf arxiv:IDvN`. For a publisher or OpenReview PDF:
-
-```bash
-paperstack paper read doi:10.1234/example --pdf-url https://publisher.example/paper.pdf
-paperstack paper pdf openreview:FORUM_ID --pdf-url https://openreview.net/pdf?id=FORUM_ID
-```
-
-PDF reads print cached Markdown and support `--start`/`--max-chars`; they do not invent LaTeX
-section IDs. Explicit URLs use separate caches keyed by identifier and URL. The PDF extra is
-required to convert new content. Existing valid conversions work offline without the extra.
-
-PDF metadata includes hashes of the original PDF and derived text, page-level provenance,
-OCR warnings and quality. Partial output is retained for inspection but returns failure unless
-`--allow-partial` is explicitly supplied, including offline. An OCR runtime failure does not
-silently become a successful read. Old caches without original-PDF hashes need online rebuilding.
-“Complete” means no converter-reported unresolved pages, not independently verified table accuracy;
-inspect original table layouts before accepting numbers. No corpus registration is needed.
 
 OpenReview exact-title search uses its title-only exact mode and verifies a normalized title match locally. Status
 filtering is conservative because venues encode decisions and withdrawals differently; Paperstack infers it from
