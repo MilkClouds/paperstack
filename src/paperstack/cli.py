@@ -876,6 +876,7 @@ def _read_pdf(a, ref, offline):
     import hashlib
     from contextlib import redirect_stdout
     from urllib.parse import urlparse
+
     from .content import arxiv_pdf
     from .content.arxiv_source import _print_chunk
 
