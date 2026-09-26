@@ -45,7 +45,7 @@ def _fetch(url: str, timeout: int = 60) -> bytes | None:
     return None
 
 
-def _cached_conversion(d: Path, *, allow_native_fallback: bool = False) -> Path | None:
+def _cached_conversion(d: Path, *, allow_partial: bool = False) -> Path | None:
     md_path = d / "paper.md"
     meta_path = d / "meta.json"
     if not md_path.is_file() or md_path.stat().st_size < MIN_MARKDOWN_CHARS or not meta_path.is_file():
@@ -61,7 +61,9 @@ def _cached_conversion(d: Path, *, allow_native_fallback: bool = False) -> Path 
         meta.get("converter") == CONVERTER
         and meta.get("bytes") == len(markdown)
         and meta.get("sha256") == hashlib.sha256(markdown).hexdigest()
-        and (allow_native_fallback or meta.get("conversion_mode") != "native_fallback")
+        and (allow_partial or (meta.get("quality") == "complete" and meta.get("conversion_mode") != "native_fallback"))
+        and (d / "paper.pdf").is_file()
+        and meta.get("pdf_sha256") == hashlib.sha256((d / "paper.pdf").read_bytes()).hexdigest()
     )
     return md_path if valid else None
 
@@ -169,10 +171,17 @@ def _download_pdf(url: str, pdf_path: Path) -> bool:
     return True
 
 
-def convert(arxiv_id: str, *, allow_native_fallback: bool = False) -> bool:
+def convert(
+    arxiv_id: str,
+    *,
+    allow_partial: bool = False,
+    url: str | None = None,
+    refresh: bool = False,
+    paper_ref: str | None = None,
+) -> bool:
     d = CACHE_DIR / arxiv_id
-    cached = _cached_conversion(d, allow_native_fallback=allow_native_fallback)
-    if cached is not None:
+    cached = _cached_conversion(d, allow_partial=allow_partial)
+    if cached is not None and not refresh:
         print(f"{arxiv_id}: cached at {cached}")
         return True
 
@@ -186,10 +195,10 @@ def convert(arxiv_id: str, *, allow_native_fallback: bool = False) -> bool:
         )
         return False
 
-    url = f"https://arxiv.org/pdf/{arxiv_id}"
+    url = url or f"https://arxiv.org/pdf/{arxiv_id}"
     d.mkdir(parents=True, exist_ok=True)
     pdf_path = d / "paper.pdf"
-    reused_cached_pdf = _is_pdf(pdf_path)
+    reused_cached_pdf = not refresh and _is_pdf(pdf_path)
     if not reused_cached_pdf and not _download_pdf(url, pdf_path):
         return False
 
@@ -235,10 +244,21 @@ def convert(arxiv_id: str, *, allow_native_fallback: bool = False) -> bool:
         print(f"{arxiv_id}: converted to only {chars} chars, treat as a failure", file=sys.stderr)
         return False
 
+    if paper_ref:
+        meta["paper_ref"] = paper_ref
+        if not paper_ref.startswith("arxiv:"):
+            meta.pop("arxiv_id", None)
+    meta["pdf_sha256"] = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
     md_path = d / "paper.md"
     md_path.write_bytes(md.encode("utf-8"))
     (d / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"{arxiv_id}: {len(md)} chars -> {md_path}")
+    if meta["quality"] != "complete" and not allow_partial:
+        print(
+            "Partial extraction retained; inspect meta.json and the PDF, or explicitly use --allow-partial.",
+            file=sys.stderr,
+        )
+        return False
     return True
 
 

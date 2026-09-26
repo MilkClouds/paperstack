@@ -209,12 +209,15 @@ def test_dblp_build_is_exposed_through_cli(monkeypatch, capsys, tmp_path):
 def test_offline_pdf_accepts_a_short_current_conversion(monkeypatch, tmp_path):
     paper_dir = tmp_path / "2601.00001"
     paper_dir.mkdir()
+    (paper_dir / "paper.pdf").write_bytes(b"%PDF-test")
     markdown = ("short OCR result " * 8).encode()
     (paper_dir / "paper.md").write_bytes(markdown)
     (paper_dir / "meta.json").write_text(
         json.dumps(
             {
                 "converter": "pdf-inspector",
+                "quality": "complete",
+                "pdf_sha256": hashlib.sha256(b"%PDF-test").hexdigest(),
                 "conversion_mode": "native_fallback",
                 "bytes": len(markdown),
                 "sha256": hashlib.sha256(markdown).hexdigest(),
@@ -222,7 +225,9 @@ def test_offline_pdf_accepts_a_short_current_conversion(monkeypatch, tmp_path):
         )
     )
     monkeypatch.setenv("PAPERSTACK_PAPERS_DIR", str(tmp_path))
-    monkeypatch.setattr(sys, "argv", ["paperstack", "paper", "pdf", "arxiv:2601.00001", "--offline"])
+    monkeypatch.setattr(
+        sys, "argv", ["paperstack", "paper", "pdf", "arxiv:2601.00001", "--offline", "--allow-partial"]
+    )
     monkeypatch.setattr(arxiv_pdf, "CACHE_DIR", tmp_path)
 
     assert cli.main() == 0

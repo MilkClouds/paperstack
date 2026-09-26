@@ -37,18 +37,21 @@ class PaperRef:
     value: str
 
     @classmethod
-    def parse(cls, raw: str) -> PaperRef:
+    def parse(cls, raw: str, *, preserve_version: bool = False) -> PaperRef:
         if ":" not in raw:
             raise ValueError("paper reference needs a prefix: arxiv:, doi:, dblp:, or openreview:")
         kind, value = raw.strip().split(":", 1)
         if kind not in ("arxiv", "doi", "dblp", "openreview") or not value:
             raise ValueError("paper reference needs a prefix: arxiv:, doi:, dblp:, or openreview:")
         if kind == "arxiv":
-            value = re.sub(r"v\d+$", "", value)
+            versioned = value
+            value = re.sub(r"v[1-9]\d*$", "", value)
             modern = re.fullmatch(r"\d{2}(?:0[1-9]|1[0-2])\.\d{4,5}", value)
             legacy = re.fullmatch(r"[A-Za-z][A-Za-z.-]*/\d{2}(?:0[1-9]|1[0-2])\d{3}", value)
             if not (modern or legacy):
                 raise ValueError("invalid arXiv reference")
+            if preserve_version:
+                value = versioned
         return cls(kind, value)
 
 

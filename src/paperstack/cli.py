@@ -872,6 +872,42 @@ def _paper_cache() -> Path:
     return Path(os.environ.get("PAPERSTACK_PAPERS_DIR", base / "paperstack" / "papers"))
 
 
+def _read_pdf(a, ref, offline):
+    import hashlib
+    from contextlib import redirect_stdout
+    from urllib.parse import urlparse
+    from .content import arxiv_pdf
+    from .content.arxiv_source import _print_chunk
+
+    url = a.pdf_url
+    if ref.kind != "arxiv" and not url:
+        die("non-arXiv content requires --pdf-url with the primary-source PDF URL")
+    if url and (urlparse(url).scheme != "https" or not urlparse(url).hostname or urlparse(url).username):
+        die("--pdf-url must be an HTTPS URL without credentials")
+    if offline and a.refresh:
+        die("--offline and --refresh cannot be used together")
+    if a.paper_cmd == "read" and (a.outline or a.section_id or a.documents or a.document):
+        die("PDF reads support --start/--max-chars, not LaTeX document or section selection")
+    key = ref.value if not url else "external-" + hashlib.sha256(f"{ref.kind}:{ref.value}\n{url}".encode()).hexdigest()
+    arxiv_pdf.CACHE_DIR = _paper_cache()
+    directory = arxiv_pdf.CACHE_DIR / key
+    if offline:
+        if arxiv_pdf._cached_conversion(directory, allow_partial=a.allow_partial) is None:
+            die("no usable cached PDF conversion; partial content requires --allow-partial")
+    else:
+        with redirect_stdout(sys.stderr):
+            converted = arxiv_pdf.convert(
+                key, url=url, refresh=a.refresh, allow_partial=a.allow_partial, paper_ref=f"{ref.kind}:{ref.value}"
+            )
+        if not converted:
+            return 1
+    if a.paper_cmd == "read":
+        _print_chunk((directory / "paper.md").read_text(), a.start, a.max_chars)
+    else:
+        print(directory / "paper.md")
+    return 0
+
+
 def _run_paper(a: argparse.Namespace) -> int:
     from . import credentials, metadata
 
@@ -1008,44 +1044,35 @@ def _run_paper(a: argparse.Namespace) -> int:
         return 0 if result["status"] == "ok" else 1
 
     try:
-        ref = metadata.PaperRef.parse(a.paper_ref)
+        ref = metadata.PaperRef.parse(a.paper_ref, preserve_version=True)
     except ValueError as exc:
         die(str(exc))
-    if ref.kind != "arxiv":
-        die(f"paper {a.paper_cmd} currently requires an arxiv: reference")
-    if a.paper_cmd == "read":
-        from .content import arxiv_source
+    if ref.kind == "arxiv" and not re.search(r"v[1-9]\d*$", ref.value):
+        warn("Unversioned arXiv reference: cached content may not be current; pin vN for reproducible reads.")
+    if a.pdf_url or a.paper_cmd == "pdf" or ref.kind != "arxiv":
+        return _read_pdf(a, ref, offline)
+    from .content import arxiv_source
 
-        arxiv_source.CACHE_DIR = _paper_cache()
-        cached_source = arxiv_source.CACHE_DIR / ref.value / "src"
-        if offline and a.refresh:
-            die("--offline and --refresh cannot be used together")
-        if offline and (not cached_source.is_dir() or not arxiv_source._tex_candidates(cached_source)):
-            die(f"no complete cached source for arxiv:{ref.value}")
-        argv = ["read", ref.value]
-        if a.outline:
-            argv.append("--outline")
-        elif a.section_id:
-            argv.extend(["--section", a.section_id])
-        if a.refresh:
-            argv.append("--refresh")
-        argv.extend(["--start", str(a.start), "--max-chars", str(a.max_chars)])
-        arxiv_source.main(argv)
-        return 0
-    if a.paper_cmd == "pdf":
-        from .content import arxiv_pdf
-
-        arxiv_pdf.CACHE_DIR = _paper_cache()
-        cached_pdf = arxiv_pdf._cached_conversion(
-            arxiv_pdf.CACHE_DIR / ref.value,
-            allow_native_fallback=offline,
-        )
-        if offline and cached_pdf is None:
-            die(f"no usable cached PDF conversion for arxiv:{ref.value}")
-        if not arxiv_pdf.convert(ref.value, allow_native_fallback=offline):
-            return 1
-        return 0
-    raise AssertionError(a.paper_cmd)
+    arxiv_source.CACHE_DIR = _paper_cache()
+    cached_source = arxiv_source.CACHE_DIR / ref.value / "src"
+    if offline and a.refresh:
+        die("--offline and --refresh cannot be used together")
+    if offline and (not cached_source.is_dir() or not arxiv_source._tex_candidates(cached_source)):
+        die(f"no complete cached source for arxiv:{ref.value}")
+    argv = ["read", ref.value]
+    if a.outline:
+        argv.append("--outline")
+    elif a.section_id:
+        argv.extend(["--section", a.section_id])
+    if a.documents:
+        argv.append("--documents")
+    if a.document:
+        argv.extend(["--document", a.document])
+    if a.refresh:
+        argv.append("--refresh")
+    argv.extend(["--start", str(a.start), "--max-chars", str(a.max_chars)])
+    arxiv_source.main(argv)
+    return 0
 
 
 def _run_index(a: argparse.Namespace) -> int:
@@ -1226,16 +1253,23 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         _output(s)
         _offline(s)
     s = paper_sub.add_parser("read", help="read the LaTeX body, outline, or one section")
-    s.add_argument("paper_ref", help="arxiv: reference")
+    s.add_argument("paper_ref", help="arxiv: (version preserved), doi:, dblp:, or openreview: reference")
     mode = s.add_mutually_exclusive_group()
     mode.add_argument("--outline", action="store_true", help="print numbered section headings only")
     mode.add_argument("--section", dest="section_id", help="print one section by outline number")
     s.add_argument("--refresh", action="store_true", help="replace the cached arXiv source")
     s.add_argument("--start", type=int, default=0, help="start at this character offset")
     s.add_argument("--max-chars", type=int, default=0, help="truncate output after this many characters")
+    s.add_argument("--documents", action="store_true", help="list source files, including supplements")
+    s.add_argument("--document", help="source-relative TeX root to read")
+    s.add_argument("--pdf-url", help="explicit primary-source HTTPS PDF URL")
+    s.add_argument("--allow-partial", action="store_true", help="explicitly accept incomplete PDF extraction")
     _offline(s)
     s = paper_sub.add_parser("pdf", help="download and convert a native PDF submission")
-    s.add_argument("paper_ref", help="arxiv: reference")
+    s.add_argument("paper_ref", help="arxiv: (version preserved), doi:, dblp:, or openreview: reference")
+    s.add_argument("--pdf-url", help="explicit primary-source HTTPS PDF URL")
+    s.add_argument("--allow-partial", action="store_true", help="explicitly accept incomplete PDF extraction")
+    s.add_argument("--refresh", action="store_true", help="download and convert the PDF again")
     _offline(s)
 
     index = sub.add_parser("index", help="optional local lookup indexes")
