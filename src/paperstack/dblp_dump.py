@@ -72,15 +72,13 @@ def _toc(element: ElementTree.Element) -> str | None:
     return url.split("#", 1)[0].removesuffix(".html")
 
 
-def targets(venues: Iterable[str], year_filter: set[int] | None = None) -> dict[str, tuple[str, int]]:
+def targets(venues: Iterable[str]) -> dict[str, tuple[str, int]]:
     """Map each catalog table-of-contents page to its (venue, year)."""
     found: dict[str, tuple[str, int]] = {}
     for venue in venues:
         definition = VENUES[venue]
         suffixes = ["", *definition.get("suffixes", []), *definition.get("extra_tocs", [])]
         for year in years(venue):
-            if year_filter is not None and year not in year_filter:
-                continue
             for suffix in suffixes:
                 toc = toc_query(venue, year, suffix).removeprefix("toc:").removesuffix(".bht:")
                 found[toc] = (venue, year)
@@ -111,13 +109,9 @@ def _bibtex(record: dict[str, object], venue_title: str | None) -> str:
     return f"@{record['tag']}{{DBLP:{record['key']},\n{body}\n}}"
 
 
-def load(
-    path: Path,
-    venues: Iterable[str],
-    year_filter: set[int] | None = None,
-) -> dict[tuple[str, int], list[str]]:
+def load(path: Path, venues: Iterable[str]) -> dict[tuple[str, int], list[str]]:
     """Return DBLP-style BibTeX entries per (venue, year) for every catalog record in the dump."""
-    wanted = targets(venues, year_filter)
+    wanted = targets(venues)
     proceedings_titles: dict[str, str] = {}
     records: list[tuple[tuple[str, int], dict[str, object]]] = []
     for element in iter_records(path):

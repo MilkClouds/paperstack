@@ -77,33 +77,12 @@ def test_dump_records_become_index_rows(tmp_path):
     assert article[4] == "J. Mach. Learn. Res." and article[6] == "article"
 
 
-def test_builder_reads_the_dump_without_the_search_api(tmp_path):
+def test_builder_writes_every_catalog_record_from_the_dump(tmp_path):
     output = tmp_path / "index.parquet"
 
-    def unused(*_args, **_kwargs):
-        raise AssertionError("the search API must not be called")
-
     result = dblp_build.build(
-        output,
-        snapshot="2026.11",
-        selected_venues=["rss"],
-        minimum_records=1,
-        dump=_dump(tmp_path),
-        fetch=unused,
+        output, snapshot="2026.11", selected_venues=["rss"], minimum_records=1, dump=_dump(tmp_path)
     )
 
     assert result["refreshed"] == {"rss": {"2023": 2}}
     assert pl.read_parquet(output)["dblp_key"].to_list() == ["DBLP:conf/rss/2023", "DBLP:conf/rss/ChiFDXCBS23"]
-
-
-def test_builder_keeps_a_record_whose_year_differs_from_its_toc(tmp_path):
-    early = "@proceedings{DBLP:conf/nips/2000,\n  title = {NIPS 13},\n  year = {2001}\n}"
-
-    def fetch(venue, year, **_kwargs):
-        later = "@inproceedings{DBLP:conf/nips/Later01,\n  title = {A 2001 Paper},\n  year = {2001}\n}"
-        return {2000: [early], 2001: [later]}.get(year, [])
-
-    output = tmp_path / "index.parquet"
-    dblp_build.build(output, snapshot="2026.11", selected_venues=["nips"], minimum_records=1, fetch=fetch)
-
-    assert pl.read_parquet(output)["dblp_key"].to_list() == ["DBLP:conf/nips/2000", "DBLP:conf/nips/Later01"]

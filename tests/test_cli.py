@@ -186,12 +186,10 @@ def test_dblp_build_is_exposed_through_cli(monkeypatch, capsys, tmp_path):
             str(output),
             "--snapshot",
             "2026.09",
-            "--base",
-            "previous.parquet",
+            "--dump",
+            "dblp.xml.gz",
             "--venue",
             "rss",
-            "--year",
-            "2026",
             "--minimum-records",
             "1",
         ],
@@ -200,9 +198,8 @@ def test_dblp_build_is_exposed_through_cli(monkeypatch, capsys, tmp_path):
     assert cli.main() == 0
     assert calls[0][0] == output
     assert calls[0][1]["snapshot"] == "2026.09"
-    assert calls[0][1]["base"] == Path("previous.parquet")
+    assert calls[0][1]["dump"] == Path("dblp.xml.gz")
     assert calls[0][1]["selected_venues"] == ["rss"]
-    assert calls[0][1]["selected_years"] == [2026]
     assert "records: 1" in capsys.readouterr().out
 
 

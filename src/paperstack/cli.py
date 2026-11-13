@@ -1094,13 +1094,9 @@ def _run_index(a: argparse.Namespace) -> int:
             info = dblp_build.build(
                 a.output,
                 snapshot=a.snapshot,
-                base=a.base,
-                selected_venues=a.venues,
-                selected_years=a.years,
-                base_url=a.base_url,
-                minimum_records=a.minimum_records,
-                delay=a.delay,
                 dump=a.dump,
+                selected_venues=a.venues,
+                minimum_records=a.minimum_records,
             )
         elif a.dblp_cmd == "install-file":
             info = dblp_index.install_file(a.path)
@@ -1280,15 +1276,11 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     dblp_sub = dblp.add_subparsers(dest="dblp_cmd", required=True)
     for command in ("status", "install", "update"):
         _output(dblp_sub.add_parser(command))
-    s = dblp_sub.add_parser("build", help="build or refresh a snapshot from DBLP's XML dump or search API")
+    s = dblp_sub.add_parser("build", help="build a snapshot from DBLP's XML dump")
     s.add_argument("output", type=Path)
-    s.add_argument("--dump", type=Path, help="local dblp.xml.gz; read records from it instead of the search API")
     s.add_argument("--snapshot", required=True, help="YYYY.MM.DD snapshot version")
-    s.add_argument("--base", type=Path, help="existing DBLP Parquet to merge into")
+    s.add_argument("--dump", type=Path, required=True, help="local dblp.xml.gz (https://dblp.org/xml/dblp.xml.gz)")
     s.add_argument("--venue", action="append", dest="venues")
-    s.add_argument("--year", action="append", type=int, dest="years")
-    s.add_argument("--base-url", default="https://dblp.org")
-    s.add_argument("--delay", type=float, default=0.25)
     s.add_argument("--minimum-records", type=int, default=250_000)
     _output(s)
     s = dblp_sub.add_parser("install-file", help="verify and install a locally built snapshot")
