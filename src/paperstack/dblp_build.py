@@ -1,4 +1,4 @@
-"""Build a selected-venue DBLP index directly from DBLP."""
+"""Build a selected-venue DBLP index from DBLP's XML dump or its search API."""
 
 from __future__ import annotations
 
@@ -111,11 +111,17 @@ def _base_rows(base: Path | None) -> dict[str, tuple]:
     return {row[2] or f"title:{row[0]}": row for row in pl.read_parquet(base).select(dblp_index.COLUMNS).iter_rows()}
 
 
-def _replace_venue_year(rows: dict[str, tuple], venue: str, year: int) -> None:
+def _replace_venue_year(rows: dict[str, tuple], venue: str, year: int, fresh: set[str]) -> None:
+    # A record's year can differ from its table of contents (NIPS 2000 proceedings appeared in 2001), so rows written
+    # earlier in this build are never stale.
     definition = VENUES[venue]
     namespace = "journals" if definition.get("type") == "journals" else "conf"
     prefix = f"DBLP:{namespace}/{definition['dir']}/"
-    stale = [key for key, row in rows.items() if str(row[2] or "").startswith(prefix) and row[5] == year]
+    stale = [
+        key
+        for key, row in rows.items()
+        if key not in fresh and str(row[2] or "").startswith(prefix) and row[5] == year
+    ]
     for key in stale:
         del rows[key]
 
@@ -130,6 +136,7 @@ def build(
     base_url: str = "https://dblp.org",
     minimum_records: int = dblp_index.MIN_RECORDS,
     delay: float = 0.0,
+    dump: Path | None = None,
     fetch: Callable[..., list[str]] = fetch_venue_year,
 ) -> dict[str, object]:
     if output.exists():
@@ -140,7 +147,16 @@ def build(
         raise ValueError(f"unknown DBLP venues: {', '.join(unknown)}")
     year_filter = set(selected_years) if selected_years is not None else None
     rows = _base_rows(base)
+    if dump is not None:
+        from . import dblp_dump
+
+        from_dump = dblp_dump.load(dump, venue_names, year_filter)
+
+        def fetch(venue: str, year: int, **_kwargs) -> list[str]:
+            return from_dump.get((venue, year), [])
+
     coverage: dict[str, dict[str, int]] = {}
+    fresh: set[str] = set()
     for venue in venue_names:
         for year in years(venue):
             if year_filter is not None and year not in year_filter:
@@ -148,10 +164,12 @@ def build(
             bibtex_entries = fetch(venue, year, base_url=base_url, delay=delay)
             if not bibtex_entries:
                 continue
-            _replace_venue_year(rows, venue, year)
+            _replace_venue_year(rows, venue, year, fresh)
             for bibtex in bibtex_entries:
                 row = dblp_index._row("", bibtex)
-                rows[row[2] or f"title:{row[0]}"] = row
+                key = row[2] or f"title:{row[0]}"
+                rows[key] = row
+                fresh.add(key)
             coverage.setdefault(venue, {})[str(year)] = len(bibtex_entries)
     if len(rows) < minimum_records:
         raise RuntimeError(f"only {len(rows)} records; expected at least {minimum_records}")

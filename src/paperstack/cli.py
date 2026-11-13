@@ -1100,6 +1100,7 @@ def _run_index(a: argparse.Namespace) -> int:
                 base_url=a.base_url,
                 minimum_records=a.minimum_records,
                 delay=a.delay,
+                dump=a.dump,
             )
         elif a.dblp_cmd == "install-file":
             info = dblp_index.install_file(a.path)
@@ -1279,8 +1280,9 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     dblp_sub = dblp.add_subparsers(dest="dblp_cmd", required=True)
     for command in ("status", "install", "update"):
         _output(dblp_sub.add_parser(command))
-    s = dblp_sub.add_parser("build", help="build or refresh a snapshot directly from DBLP")
+    s = dblp_sub.add_parser("build", help="build or refresh a snapshot from DBLP's XML dump or search API")
     s.add_argument("output", type=Path)
+    s.add_argument("--dump", type=Path, help="local dblp.xml.gz; read records from it instead of the search API")
     s.add_argument("--snapshot", required=True, help="YYYY.MM.DD snapshot version")
     s.add_argument("--base", type=Path, help="existing DBLP Parquet to merge into")
     s.add_argument("--venue", action="append", dest="venues")

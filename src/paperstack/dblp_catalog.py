@@ -8,7 +8,7 @@ CURRENT_YEAR = 2026
 
 VENUES: dict[str, dict[str, Any]] = {
     # ML / AI
-    "neurips": {"dir": "nips", "toc": "nips", "search_venue": "NeurIPS", "start": 2020},
+    "neurips": {"dir": "nips", "search_venue": "NeurIPS", "start": 2020},
     "nips": {"dir": "nips", "start": 2000, "end": 2019},
     "icml": {"dir": "icml", "start": 2010},
     "iclr": {"dir": "iclr", "start": 2013},

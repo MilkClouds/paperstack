@@ -121,7 +121,7 @@ def test_bibtex_fields_keep_nested_braces():
 def test_repository_owned_catalog_handles_year_rules_and_journals():
     assert years("iccv")[-2:] == [2023, 2025]
     assert years("neurips")[-1] == 2026
-    assert toc_query("neurips", 2025) == "toc:db/conf/nips/nips2025.bht:"
+    assert toc_query("neurips", 2025) == "toc:db/conf/nips/neurips2025.bht:"
     assert toc_query("sigmod", 2026, "c") == "toc:db/conf/sigmod/sigmod2026c.bht:"
     assert toc_query("tacl", 2026) == "toc:db/journals/tacl/tacl14.bht:"
 
@@ -152,7 +152,7 @@ def test_fetch_venue_year_falls_back_to_venue_and_year():
     entries = dblp_build.fetch_venue_year("neurips", 2025, get=get)
 
     assert entries == [BIBTEX]
-    assert calls[:2] == ["toc:db/conf/nips/nips2025.bht:", "venue:NeurIPS: year:2025:"]
+    assert calls[:2] == ["toc:db/conf/nips/neurips2025.bht:", "venue:NeurIPS: year:2025:"]
 
 
 def test_direct_builder_merges_refreshed_records_into_base(tmp_path):

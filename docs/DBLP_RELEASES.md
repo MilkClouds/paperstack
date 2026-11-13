@@ -3,40 +3,30 @@
 Paperstack owns the venue catalog, DBLP synchronization, Parquet builder, validation, installation, and lookup. A
 snapshot has one repository-owned asset: `dblp.parquet` in a `MilkClouds/paperstack` Release.
 
-## Incremental monthly refresh
+## Monthly rebuild from the XML dump
 
-Download the previous Parquet asset, then re-fetch recent venue-years directly from DBLP. A successful venue-year
-fetch replaces that slice before merging by DBLP key, so upstream corrections and deletions do not leave stale rows:
+DBLP serves its search API and record pages behind a browser proof-of-work check, and its FAQ asks bulk users to
+download the XML dump and query it locally. Rebuild every configured venue-year from the dump:
 
 ```bash
-gh release download dblp-index-PREVIOUS --pattern dblp.parquet --dir /tmp/dblp-previous \
-  --repo MilkClouds/paperstack
-uv run paperstack index dblp build /tmp/dblp.parquet \
-  --snapshot YYYY.MM.DD \
-  --base /tmp/dblp-previous/dblp.parquet \
-  --year 2025 --year 2026
+curl -o /tmp/dblp.xml.gz https://dblp.org/xml/dblp.xml.gz
+uv run paperstack index dblp build /tmp/dblp.parquet --snapshot YYYY.MM.DD --dump /tmp/dblp.xml.gz
 sha256sum /tmp/dblp.parquet
 gh release create dblp-index-YYYY.MM.DD /tmp/dblp.parquet \
   --repo MilkClouds/paperstack \
   --title "DBLP index — YYYY.MM.DD"
 ```
 
-Use `--venue` repeatedly to refresh only selected venues. Omit `--venue` to use the repository-owned catalog in
-`src/paperstack/dblp_catalog.py`. A recent year that DBLP has not ingested returns no records and leaves the base
-snapshot unchanged. Re-run recent years every release because DBLP can add proceedings after the first successful
-fetch.
+Records are matched to the catalog by their table-of-contents page, so workshop and companion volumes stay out.
+Dump fields are Unicode and unwrapped, while API BibTeX uses LaTeX escapes and line wrapping; rebuild from the dump
+rather than merging it into an API-built `--base`, so one snapshot has one field style.
 
-## Full rebuild
+## Search API refresh
 
-Omit `--base` and year filters to fetch every configured venue-year directly from DBLP:
-
-```bash
-uv run paperstack index dblp build /tmp/dblp.parquet --snapshot YYYY.MM.DD
-```
-
-This is intentionally slower and serves as a reproducibility and disaster-recovery path. `--base-url` can select a
-DBLP mirror if the primary endpoint rate-limits a bulk build. Add or change venues only in
-`src/paperstack/dblp_catalog.py`; no external repository or intermediate archive is part of the release chain.
+Without `--dump`, the builder queries DBLP's search API per venue-year, optionally merging into `--base` and limited by
+`--venue` and `--year`. A recent year that DBLP has not ingested returns no records and leaves the base unchanged.
+This path works only while the API answers non-browser clients; `--base-url` selects a mirror. Add or change venues
+only in `src/paperstack/dblp_catalog.py`.
 
 The Parquet builder stores only structured lookup fields, Zstd-compresses the file, and embeds its snapshot, source
 URL, schema version, coverage, refreshed venue-year counts, and record count. It does not store raw BibTeX. The

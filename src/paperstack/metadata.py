@@ -140,7 +140,12 @@ def request(
                 with urllib.request.urlopen(req, timeout=30, **open_options) as response:
                     _last_request[request_key] = time.monotonic()
                     _mark_request(shared_timestamp)
-                    return response.read()
+                    body = response.read()
+                if "dblp" in host and b"/.within.website/" in body[:4096]:
+                    raise urllib.error.URLError(
+                        "DBLP answered with a browser bot check; use the local index (`paperstack index dblp install`)"
+                    )
+                return body
             except urllib.error.HTTPError as exc:
                 _last_request[request_key] = time.monotonic()
                 _mark_request(shared_timestamp)

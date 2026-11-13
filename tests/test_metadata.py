@@ -432,3 +432,23 @@ def test_request_uses_arxiv_tls_context_only_for_arxiv(monkeypatch, url, expects
 
     assert metadata.request(url) == b"ok"
     assert (contexts[0] is tls.arxiv_context()) is expects_context
+
+
+def test_dblp_bot_check_is_reported_instead_of_parsed(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b'<!doctype html><script src="/.within.website/x/cmd/anubis/static/js/main.mjs"></script>'
+
+    monkeypatch.setattr(dblp_index, "search", lambda *args, **kwargs: [])
+    monkeypatch.setattr(metadata.urllib.request, "urlopen", lambda request, timeout: Response())
+
+    result = metadata.search("dblp", "Some Title")
+
+    assert result["status"] == "error"
+    assert "local index" in result["error"]
