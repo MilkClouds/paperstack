@@ -121,125 +121,17 @@ def test_bibtex_fields_keep_nested_braces():
 def test_repository_owned_catalog_handles_year_rules_and_journals():
     assert years("iccv")[-2:] == [2023, 2025]
     assert years("neurips")[-1] == 2026
-    assert toc_query("neurips", 2025) == "toc:db/conf/nips/nips2025.bht:"
+    assert toc_query("neurips", 2025) == "toc:db/conf/nips/neurips2025.bht:"
     assert toc_query("sigmod", 2026, "c") == "toc:db/conf/sigmod/sigmod2026c.bht:"
     assert toc_query("tacl", 2026) == "toc:db/journals/tacl/tacl14.bht:"
 
 
-def test_fetch_venue_year_paginates_dblp_bibtex():
-    calls = []
-
-    def get(_url, params):
-        calls.append(params)
-        if params["f"] == "0":
-            return BIBTEX
-        return ""
-
-    entries = dblp_build.fetch_venue_year("rss", 2023, get=get)
-
-    assert entries == [BIBTEX]
-    assert [call["f"] for call in calls] == ["0", "100"]
-    assert calls[0]["q"] == "toc:db/conf/rss/rss2023.bht:"
-
-
-def test_fetch_venue_year_falls_back_to_venue_and_year():
-    calls = []
-
-    def get(_url, params):
-        calls.append(params["q"])
-        return BIBTEX if params["q"] == "venue:NeurIPS: year:2025:" and params["f"] == "0" else ""
-
-    entries = dblp_build.fetch_venue_year("neurips", 2025, get=get)
-
-    assert entries == [BIBTEX]
-    assert calls[:2] == ["toc:db/conf/nips/nips2025.bht:", "venue:NeurIPS: year:2025:"]
-
-
-def test_direct_builder_merges_refreshed_records_into_base(tmp_path):
-    base = tmp_path / "base.parquet"
-    _create_fixture(base, snapshot="2026.08")
-    output = tmp_path / "refreshed.parquet"
-    new_bibtex = (
-        BIBTEX.replace("chi2023diffusion", "DBLP:conf/rss/New26")
-        .replace("Diffusion Policy: Visuomotor Policy Learning via Action Diffusion", "A New RSS Paper")
-        .replace("2023", "2026")
-    )
-
-    def fetch(venue, year, **_kwargs):
-        return [new_bibtex] if (venue, year) == ("rss", 2026) else []
-
-    result = dblp_build.build(
-        output,
-        snapshot="2026.09",
-        base=base,
-        selected_venues=["rss"],
-        selected_years=[2026],
-        minimum_records=1,
-        fetch=fetch,
-    )
-
-    metadata = pl.read_parquet_metadata(output)
-    frame = pl.read_parquet(output)
-    assert result["records"] == 2
-    assert frame["title"].to_list() == [
-        "A New RSS Paper",
-        "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion",
-    ]
-    assert metadata["snapshot"] == "2026.09"
-    assert metadata["venue_catalog"] == '{"rss":{"2026":1}}'
-
-
-def test_direct_builder_replaces_a_successfully_refetched_venue_year(tmp_path):
-    base = tmp_path / "base.parquet"
-    _create_fixture(base, snapshot="2026.08")
-    output = tmp_path / "refreshed.parquet"
-    corrected = BIBTEX.replace(
-        "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion", "Corrected Diffusion Policy"
-    )
-
-    def fetch(venue, year, **_kwargs):
-        return [corrected] if (venue, year) == ("rss", 2023) else []
-
-    result = dblp_build.build(
-        output,
-        snapshot="2026.09",
-        base=base,
-        selected_venues=["rss"],
-        selected_years=[2023],
-        minimum_records=1,
-        fetch=fetch,
-    )
-
-    assert result["records"] == 1
-    assert pl.read_parquet(output)["title"].to_list() == ["Corrected Diffusion Policy"]
-
-
-def test_direct_builder_preserves_base_when_dblp_has_not_ingested_year(tmp_path):
-    base = tmp_path / "base.parquet"
-    _create_fixture(base, snapshot="2026.08")
-    output = tmp_path / "refreshed.parquet"
-
-    result = dblp_build.build(
-        output,
-        snapshot="2026.09",
-        base=base,
-        selected_venues=["rss"],
-        selected_years=[2026],
-        minimum_records=1,
-        fetch=lambda *_args, **_kwargs: [],
-    )
-
-    assert result["records"] == 1
-    assert pl.read_parquet(output)["title"].to_list() == [
-        "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion"
-    ]
-
-
-def test_direct_builder_rejects_unknown_venue(tmp_path):
+def test_builder_rejects_unknown_venue(tmp_path):
     with pytest.raises(ValueError, match="unknown DBLP venues"):
         dblp_build.build(
             tmp_path / "index.parquet",
             snapshot="2026.09",
+            dump=tmp_path / "dblp.xml.gz",
             selected_venues=["missing"],
             minimum_records=0,
         )

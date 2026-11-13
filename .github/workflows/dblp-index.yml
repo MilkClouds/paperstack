@@ -1,0 +1,35 @@
+name: DBLP index
+
+on:
+  schedule:
+    - cron: "0 3 2 * *"  # monthly
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Download the DBLP XML dump
+        run: |
+          curl --fail --location --retry 3 -o dblp.xml.gz https://dblp.org/xml/dblp.xml.gz
+          gzip -t dblp.xml.gz  # a bot-check page instead of the dump fails here
+      - name: Build
+        id: build
+        run: |
+          snapshot=$(date -u +%Y.%m.%d)
+          echo "snapshot=$snapshot" >> "$GITHUB_OUTPUT"
+          uv run paperstack index dblp build dblp.parquet --snapshot "$snapshot" --dump dblp.xml.gz --json
+          sha256sum dblp.parquet
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="dblp-index-${{ steps.build.outputs.snapshot }}"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "$tag exists"; exit 0; fi
+          gh release create "$tag" dblp.parquet --target "$GITHUB_SHA" \
+            --title "DBLP index — ${{ steps.build.outputs.snapshot }}" \
+            --notes "Selected-venue DBLP index built from the DBLP XML dump by the DBLP index workflow. sha256 $(sha256sum dblp.parquet | cut -d' ' -f1)"
