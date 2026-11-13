@@ -63,6 +63,7 @@ def iter_records(path: Path) -> Iterator[ElementTree.Element]:
                 if element.tag in RECORD_TAGS:
                     yield element
                 element.clear()
+    parser.close()  # a truncated dump raises here instead of yielding a partial index
 
 
 def _toc(element: ElementTree.Element) -> str | None:

@@ -1,6 +1,8 @@
 import gzip
+from xml.etree import ElementTree
 
 import polars as pl
+import pytest
 
 from paperstack import dblp_build, dblp_dump, dblp_index
 
@@ -86,3 +88,12 @@ def test_builder_writes_every_catalog_record_from_the_dump(tmp_path):
 
     assert result["refreshed"] == {"rss": {"2023": 2}}
     assert pl.read_parquet(output)["dblp_key"].to_list() == ["DBLP:conf/rss/2023", "DBLP:conf/rss/ChiFDXCBS23"]
+
+
+def test_truncated_dump_is_rejected(tmp_path):
+    path = tmp_path / "dblp.xml.gz"
+    with gzip.open(path, "wt", encoding="iso-8859-1") as handle:
+        handle.write(DUMP[: DUMP.index("<article")])
+
+    with pytest.raises(ElementTree.ParseError):
+        dblp_dump.load(path, ["rss"])
