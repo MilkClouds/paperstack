@@ -12,7 +12,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - name: Download the DBLP XML dump
         run: |
           curl --fail --location --retry 3 -o dblp.xml.gz https://dblp.org/xml/dblp.xml.gz
