@@ -110,7 +110,10 @@ def test_runtime_failure_caches_partial_native_extraction(tmp_path, monkeypatch,
     assert meta["conversion_mode"] == "native_fallback"
     assert meta["quality"] == "partial"
     assert meta["ocr_error"] == "failed to load PDFium"
-    assert "cached partial native extraction" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "cached partial native extraction" in error
+    assert "OCR error: failed to load PDFium" in error
+    assert arxiv_pdf.OCR_RUNTIME_GUIDE in error
 
 
 def test_runtime_failure_rejects_a_fully_scanned_pdf(tmp_path, monkeypatch, capsys):
@@ -319,3 +322,26 @@ def test_current_converter_cache_rejects_non_object_metadata(tmp_path):
     (paper_dir / "meta.json").write_text("null")
 
     assert arxiv_pdf._cached_conversion(paper_dir) is None
+
+
+def test_venv_runtime_discovery_preserves_explicit_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sys, "prefix", str(tmp_path))
+    monkeypatch.setattr(sys, "base_prefix", "/system-python")
+    monkeypatch.delenv("PDFIUM_LIB_PATH", raising=False)
+    monkeypatch.setenv("ORT_DYLIB_PATH", "/explicit/onnx.so")
+    library = tmp_path / "ocr-runtime/pdfium/lib/libpdfium.so"
+    library.parent.mkdir(parents=True)
+    library.touch()
+    arxiv_pdf._configure_ocr_runtime()
+    assert arxiv_pdf.os.environ["PDFIUM_LIB_PATH"] == str(library)
+    assert arxiv_pdf.os.environ["ORT_DYLIB_PATH"] == "/explicit/onnx.so"
+
+
+def test_missing_venv_runtimes_leave_environment_unset(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "prefix", str(tmp_path))
+    for name in ("PDFIUM_LIB_PATH", "ORT_DYLIB_PATH"):
+        monkeypatch.delenv(name, raising=False)
+    arxiv_pdf._configure_ocr_runtime()
+    assert "PDFIUM_LIB_PATH" not in arxiv_pdf.os.environ
+    assert "ORT_DYLIB_PATH" not in arxiv_pdf.os.environ
