@@ -25,6 +25,20 @@ MIN_MARKDOWN_CHARS = 100
 OCR_RUNTIME_GUIDE = "https://github.com/firecrawl/pdf-inspector/blob/main/docs/ocr-runtime.md"
 
 
+def _configure_ocr_runtime() -> None:
+    """Find Linux runtimes installed in this interpreter's virtual environment."""
+    if sys.platform != "linux" or sys.prefix == sys.base_prefix:
+        return
+    root = Path(sys.prefix) / "ocr-runtime"
+    for name, relative in (
+        ("PDFIUM_LIB_PATH", "pdfium/lib/libpdfium.so"),
+        ("ORT_DYLIB_PATH", "onnxruntime/lib/libonnxruntime.so"),
+    ):
+        path = root / relative
+        if name not in os.environ and path.is_file():
+            os.environ[name] = str(path)
+
+
 def _fetch(url: str, timeout: int = 60) -> bytes | None:
     req = urllib.request.Request(url, headers={"User-Agent": "paperstack/1.0 (+arxiv pdf fetch)"})
     for attempt in range(3):
@@ -203,6 +217,7 @@ def convert(
     if not reused_cached_pdf and not _download_pdf(url, pdf_path):
         return False
 
+    _configure_ocr_runtime()
     while True:
         ocr_error = None
         try:
@@ -227,6 +242,8 @@ def convert(
         if _usable(md):
             if ocr_error is not None:
                 print(f"{arxiv_id}: OCR unavailable; cached {meta['quality']} native extraction", file=sys.stderr)
+                print(f"OCR error: {ocr_error}", file=sys.stderr)
+                print(f"OCR runtime setup: {OCR_RUNTIME_GUIDE}", file=sys.stderr)
             break
         needs_ocr = parsed is not None and bool(parsed.pages_recommended_for_ocr)
         if reused_cached_pdf and not needs_ocr and _download_pdf(url, pdf_path):

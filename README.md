@@ -34,6 +34,9 @@ export ORT_DYLIB_PATH=/absolute/path/to/libonnxruntime.so
 ```
 
 The runtime guide lists the matching downloads and filenames for Linux, macOS, and Windows.
+On Linux, Paperstack also discovers libraries extracted into the active virtual environment at
+`ocr-runtime/pdfium/lib/libpdfium.so` and `ocr-runtime/onnxruntime/lib/libonnxruntime.so`.
+Exported paths take precedence; native library paths in `.env` are ignored.
 
 ## AI agent skill
 
