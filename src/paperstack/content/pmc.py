@@ -13,6 +13,18 @@ from pathlib import Path
 
 from .. import metadata, pubmed
 
+FLOATS = ("table-wrap", "table-wrap-group", "fig", "fig-group")
+
+
+def license_text(node: ET.Element) -> str:
+    # A license mixes a URL element, paragraphs and bare text; separate the block children, keep everything.
+    parts = [node.text or ""]
+    for child in node:
+        content = "".join(child.itertext())
+        parts.append(f" {content} " if child.tag.rsplit("}", 1)[-1] in ("license-p", "license_ref") else content)
+        parts.append(child.tail or "")
+    return " ".join("".join(parts).split())
+
 
 def parse(raw: bytes, pmcid: str) -> dict:
     root = ET.fromstring(raw)
@@ -33,6 +45,18 @@ def parse(raw: bytes, pmcid: str) -> dict:
             return "\n".join(
                 " | ".join(pubmed.text(cell) for cell in row if cell.tag in ("td", "th")) for row in node.iter("tr")
             )
+        if node.tag == "p" and any(child.tag in FLOATS for child in node):
+            # Publishers nest tables and figures inside paragraphs; keep them as separate blocks.
+            parts, inline = [], [node.text or ""]
+            for child in node:
+                if child.tag in FLOATS:
+                    parts += [" ".join("".join(inline).split()), blocks(child)]
+                    inline = []
+                else:
+                    inline.append("".join(child.itertext()))
+                inline.append(child.tail or "")
+            parts.append(" ".join("".join(inline).split()))
+            return "\n\n".join(part for part in parts if part)
         if node.tag in ("p", "title", "label", "ref", "disp-formula"):
             return pubmed.text(node)
         children = [blocks(child) for child in node]
@@ -67,7 +91,7 @@ def parse(raw: bytes, pmcid: str) -> dict:
     return {
         "pmcid": pmcid,
         "title": pubmed.text(article.find("front/article-meta/title-group/article-title")),
-        "licenses": [pubmed.text(node) for node in article.findall("front/article-meta/permissions/license")],
+        "licenses": [license_text(node) for node in article.findall("front/article-meta/permissions/license")],
         "sections": sections,
     }
 

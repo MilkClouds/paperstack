@@ -1,6 +1,7 @@
 import json
 import sys
 import urllib.error
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -254,3 +255,38 @@ def test_pmc_keeps_parent_text_after_nested_section_and_includes_floats():
     selected = pmc.render(document, section="1.1")
     assert selected.index("Adults.") < selected.index("After participants.")
     assert "Improvement." not in selected and "Floating table cell" not in selected
+
+
+def test_pmc_keeps_tables_and_figures_nested_in_paragraphs_as_blocks():
+    raw = JATS.replace(
+        b"<p>Adults.</p>",
+        b"""<p>Before <italic>the</italic> table.<table-wrap><label>Table 9</label><caption><p>Outcomes.</p></caption>
+<table><thead><tr><th>Arm</th><th>N</th></tr></thead><tbody><tr><td>Control</td><td>258 (58.1%)</td></tr></tbody></table>
+</table-wrap>Between.<fig><label>Fig. 3</label><caption><p>Nested figure.</p></caption></fig>After the figure.</p>""",
+    )
+    rendered = pmc.render({**pmc.parse(raw, "PMC789"), "source_url": "fixture"})
+    assert "Arm | N" in rendered and "Control | 258 (58.1%)" in rendered
+    assert "ArmN" not in rendered and "Fig. 3Nested" not in rendered
+    order = [
+        "Before the table.",
+        "Table 9",
+        "Outcomes.",
+        "Arm | N",
+        "Between.",
+        "Fig. 3",
+        "Nested figure.",
+        "After the figure.",
+    ]
+    assert [rendered.index(part) for part in order] == sorted(rendered.index(part) for part in order)
+
+
+def test_pmc_license_keeps_mixed_content_and_separates_blocks():
+    mixed = ET.fromstring(
+        "<license>Distributed under <ext-link>CC BY</ext-link>, with attribution required.</license>"
+    )
+    assert pmc.license_text(mixed) == "Distributed under CC BY, with attribution required."
+    blocks = ET.fromstring(
+        '<license xmlns:ali="http://www.niso.org/schemas/ali/1.0/"><ali:license_ref>https://example.org/by/4.0/'
+        "</ali:license_ref><license-p>Open Access.</license-p><license-p>Second paragraph.</license-p></license>"
+    )
+    assert pmc.license_text(blocks) == "https://example.org/by/4.0/ Open Access. Second paragraph."
