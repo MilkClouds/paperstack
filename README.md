@@ -128,10 +128,37 @@ paperstack paper pdf arxiv:2602.09017
 ```
 
 `metadata` accepts `arxiv:`, `doi:`, `dblp:`, and `openreview:` references. `read` and `pdf`
-accept arXiv references directly; other identifiers require an explicit primary-source HTTPS `--pdf-url`. `authors`, `citations`, and `references` use Semantic Scholar and also accept its `s2:`, `corpus:`, `acl:`,
+accept arXiv references directly; other identifiers require an explicit primary-source HTTPS `--pdf-url`
+or, for DOIs, `--source sci-hub`. `authors`, `citations`, and `references` use Semantic Scholar and also accept its `s2:`, `corpus:`, `acl:`,
 `pmid:`, and `mag:` identifiers. Structured commands expose scoped `--json` flags; networked commands expose scoped
 `--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
 of a work should be cited.
+
+### Sci-Hub PDFs
+
+```bash
+paperstack paper read doi:10.1109/JBHI.2021.3117784 --source sci-hub --max-chars 4000
+paperstack paper read doi:10.1109/JBHI.2021.3117784 --source sci-hub --offline --start 4000
+paperstack paper pdf doi:10.1109/JBHI.2021.3117784 --source sci-hub
+```
+
+Sci-Hub is opt-in on each command and accepts DOI references only. It is never queried by default
+search, metadata, or arXiv reads. The resolver checks the provider page's DOI identity,
+not the downloaded PDF's contents, and retains landing-page provenance.
+Verify the paper's title, DOI, and version before citing it. Sci-Net redirects and relative PDF links are supported.
+
+`read` and `pdf` reuse the existing PDF converter and require `paperstack-cli[pdf]`. They verify PDF bytes
+and cache hashes, retain retrieval provenance in `meta.json`, and reject partial extraction unless
+`--allow-partial` is explicit. They support character ranges, not XML/LaTeX outlines or section selection.
+Use `--refresh` to replace both the cached lookup and converted PDF. Offline reads require a successful
+cached lookup and usable PDF conversion under the same mirror configuration.
+
+The default entry point is `https://sci-hub.ru`. Set `PAPERSTACK_SCI_HUB_URL` or pass
+`--sci-hub-url https://MIRROR` to choose another HTTPS origin. Missing papers (`unavailable`), browser
+verification or rate limiting (`blocked`), and network/parser errors (`error`) are distinct; failures
+are not cached. The known ALTCHA SHA-256 verification flow is handled in the same HTTP session,
+with bounded work and one retry. Other browser challenges are reported with the landing URL.
+A successful lookup is not a guarantee that downloading the PDF will succeed.
 
 ### Source reading
 
@@ -139,7 +166,7 @@ of a work should be cited.
   Unversioned reads may use stale cached content; `--refresh` refetches, `--offline` never does.
 - `read ... --documents` lists source files. Multiple TeX roots require `--document FILE`;
   inspect relevant supplements separately. `--outline`/`--section` apply to that document.
-- DOI/OpenReview/DBLP reads require `--pdf-url https://...` pointing to the primary PDF.
+- Other non-arXiv reads require `--pdf-url https://...` pointing to the primary PDF.
   `read` prints Markdown; `pdf` prints its cache path. New conversions need the PDF extra.
 - Partial PDF extraction returns failure unless `--allow-partial` is explicit, even offline.
   Check `meta.json` and the PDF before using numbers. Converter quality does not certify accuracy.
@@ -181,6 +208,7 @@ pointer switch. See
 | `PAPERSTACK_REPO` | Explicit GitHub corpus in `OWNER/REPO` form |
 | `PAPERSTACK_TTL` | Remote corpus cache refresh interval; default `3600` seconds |
 | `PAPERSTACK_PAPERS_DIR` | arXiv source and PDF cache |
+| `PAPERSTACK_SCI_HUB_URL` | Optional HTTPS mirror origin for explicit Sci-Hub commands |
 | `SEMANTIC_SCHOLAR_API_KEY` | Optional higher-rate Semantic Scholar access |
 | `OPENREVIEW_ACCESS_TOKEN` | Optional OpenReview access cookie value |
 | `XDG_CONFIG_HOME` | Corpus profile and credential configuration root |

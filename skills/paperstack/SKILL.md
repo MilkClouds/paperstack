@@ -52,10 +52,15 @@ paperstack paper citations arxiv:2106.09685 --limit 50
 paperstack paper references arxiv:2106.09685 --limit 50
 paperstack paper read arxiv:2106.09685 --outline
 paperstack paper read arxiv:2106.09685 --section 3
+paperstack paper read doi:10.1109/JBHI.2021.3117784 --source sci-hub
 ```
 
 Pin `arxiv:IDvN`; use `--documents` and `--document FILE` to inspect separate supplements.
-Non-arXiv reads need a verified `--pdf-url`. Inspect PDF quality metadata before opting into
+Use `--source sci-hub` on DOI reads/PDF conversions only when the user requests that provider.
+It is never an automatic fallback. Check the downloaded paper's title, DOI, and version; the
+resolver checks the provider page only. `blocked` means browser verification or rate limiting,
+not a missing paper. Offline reads require the same mirror configuration and cached conversion.
+Other non-arXiv reads need a verified `--pdf-url`. Inspect PDF quality metadata before opting into
 `--allow-partial`; check original tables when extraction is ambiguous.
 
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.

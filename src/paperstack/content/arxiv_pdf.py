@@ -192,6 +192,7 @@ def convert(
     url: str | None = None,
     refresh: bool = False,
     paper_ref: str | None = None,
+    provenance: dict | None = None,
 ) -> bool:
     d = CACHE_DIR / arxiv_id
     cached = _cached_conversion(d, allow_partial=allow_partial)
@@ -265,6 +266,8 @@ def convert(
         meta["paper_ref"] = paper_ref
         if not paper_ref.startswith("arxiv:"):
             meta.pop("arxiv_id", None)
+    if provenance:
+        meta["retrieval"] = provenance
     meta["pdf_sha256"] = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
     md_path = d / "paper.md"
     md_path.write_bytes(md.encode("utf-8"))
