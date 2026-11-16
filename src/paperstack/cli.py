@@ -872,7 +872,7 @@ def _paper_cache() -> Path:
     return Path(os.environ.get("PAPERSTACK_PAPERS_DIR", base / "paperstack" / "papers"))
 
 
-def _read_pdf(a, ref, offline):
+def _read_pdf(a, ref, offline, *, provenance=None):
     import hashlib
     from contextlib import redirect_stdout
     from urllib.parse import urlparse
@@ -890,6 +890,8 @@ def _read_pdf(a, ref, offline):
     if a.paper_cmd == "read" and (a.outline or a.section_id or a.documents or a.document):
         die("PDF reads support --start/--max-chars, not LaTeX document or section selection")
     key = ref.value if not url else "external-" + hashlib.sha256(f"{ref.kind}:{ref.value}\n{url}".encode()).hexdigest()
+    if provenance:
+        key = "sci-hub-" + key
     arxiv_pdf.CACHE_DIR = _paper_cache()
     directory = arxiv_pdf.CACHE_DIR / key
     if offline:
@@ -898,7 +900,12 @@ def _read_pdf(a, ref, offline):
     else:
         with redirect_stdout(sys.stderr):
             converted = arxiv_pdf.convert(
-                key, url=url, refresh=a.refresh, allow_partial=a.allow_partial, paper_ref=f"{ref.kind}:{ref.value}"
+                key,
+                url=url,
+                refresh=a.refresh,
+                allow_partial=a.allow_partial,
+                paper_ref=f"{ref.kind}:{ref.value}",
+                **({"provenance": provenance} if provenance else {}),
             )
         if not converted:
             return 1
@@ -913,6 +920,24 @@ def _run_paper(a: argparse.Namespace) -> int:
     from . import credentials, metadata
 
     offline = getattr(a, "offline", False)
+    if a.paper_cmd in ("read", "pdf") and getattr(a, "source", "auto") == "sci-hub":
+        from .content import sci_hub
+
+        if getattr(a, "pdf_url", None):
+            die("--source sci-hub cannot be combined with --pdf-url")
+        if a.paper_cmd == "read" and (a.outline or a.section_id or a.documents or a.document):
+            die("Sci-Hub PDF reads support --start/--max-chars, not document or section selection")
+        try:
+            ref = sci_hub.reference(a.paper_ref)
+            result = sci_hub.locate(ref, _paper_cache(), mirror=a.sci_hub_url, offline=offline, refresh=a.refresh)
+        except (OSError, ValueError) as exc:
+            die(f"Sci-Hub lookup failed: {exc}")
+        if result["status"] != "ok":
+            die(f"Sci-Hub {result['status']}: {result['reason']} ({result['url']})")
+        a.pdf_url = result["response"]["pdf_url"]
+        return _read_pdf(a, ref, offline, provenance={"source": "sci_hub", **result["response"]})
+    if getattr(a, "sci_hub_url", None):
+        die("--sci-hub-url requires --source sci-hub")
     if a.paper_cmd in ("authors", "citations", "references"):
         if offline:
             die(f"paper {a.paper_cmd} requires network access")
@@ -1251,6 +1276,8 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         _output(s)
         _offline(s)
     s = paper_sub.add_parser("read", help="read the LaTeX body, outline, or one section")
+    s.add_argument("--source", choices=("auto", "sci-hub"), default="auto", help="content provider")
+    s.add_argument("--sci-hub-url", help="HTTPS mirror origin; requires --source sci-hub")
     s.add_argument("paper_ref", help="arxiv: (version preserved), doi:, dblp:, or openreview: reference")
     mode = s.add_mutually_exclusive_group()
     mode.add_argument("--outline", action="store_true", help="print numbered section headings only")
@@ -1264,6 +1291,8 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s.add_argument("--allow-partial", action="store_true", help="explicitly accept incomplete PDF extraction")
     _offline(s)
     s = paper_sub.add_parser("pdf", help="download and convert a native PDF submission")
+    s.add_argument("--source", choices=("auto", "sci-hub"), default="auto", help="content provider")
+    s.add_argument("--sci-hub-url", help="HTTPS mirror origin; requires --source sci-hub")
     s.add_argument("paper_ref", help="arxiv: (version preserved), doi:, dblp:, or openreview: reference")
     s.add_argument("--pdf-url", help="explicit primary-source HTTPS PDF URL")
     s.add_argument("--allow-partial", action="store_true", help="explicitly accept incomplete PDF extraction")
