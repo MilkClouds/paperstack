@@ -209,3 +209,88 @@ def test_redirected_http_failure_preserves_browser_landing_url(tmp_path, monkeyp
     result = sci_hub.locate(REF, tmp_path)
     assert result["status"] == "blocked"
     assert result["url"] == landing
+
+
+CHALLENGE_HTML = """<altcha-widget challengeurl="/captcha/challenge/123"></altcha-widget>
+<script>fetch('/captcha/solution/123', {})</script><div>ko:isrobot</div>"""
+
+
+def challenge(number=7):
+    return {
+        "algorithm": "SHA-256",
+        "salt": "test-salt",
+        "signature": "test-signature",
+        "maxNumber": 10,
+        "challenge": hashlib.sha256(f"test-salt{number}".encode()).hexdigest(),
+    }
+
+
+def test_pow_solution():
+    import base64
+
+    payload = json.loads(base64.b64decode(sci_hub._solve_challenge(challenge())))
+    assert payload["number"] == 7
+    assert payload["signature"] == "test-signature"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"maxNumber": True},
+        {"maxNumber": 1_000_001},
+        {"maxNumber": -1},
+        {"algorithm": "unknown"},
+        {"salt": None},
+        {"challenge": "invalid"},
+        {"maxNumber": 0},
+    ],
+)
+def test_pow_rejects_invalid_or_unsolved_work(changes):
+    assert sci_hub._solve_challenge(challenge() | changes) is None
+
+
+def test_pow_time_limit(monkeypatch):
+    times = iter([0, sci_hub.MAX_POW_SECONDS])
+    monkeypatch.setattr(sci_hub.time, "monotonic", lambda: next(times))
+    assert sci_hub._solve_challenge(challenge()) is None
+
+
+@pytest.mark.parametrize("accepted", [True, False])
+def test_challenge_reuses_session_and_retries_once(monkeypatch, accepted):
+    calls = []
+
+    def request(opener, url, data=None):
+        calls.append((opener, url, data))
+        if len(calls) == 1:
+            return CHALLENGE_HTML, LANDING
+        if len(calls) == 2:
+            assert url == "https://mirror.example/captcha/challenge/123"
+            return json.dumps(challenge()), url
+        if len(calls) == 3:
+            assert url == "https://mirror.example/captcha/solution/123"
+            assert json.loads(data)["captcha"] == sci_hub._solve_challenge(challenge())
+            return json.dumps({"success": accepted}), url
+        assert len(calls) == 4 and url == LANDING
+        return HTML, LANDING
+
+    monkeypatch.setattr(sci_hub, "_request", request)
+    html, url = sci_hub._fetch(LANDING)
+    assert html == (HTML if accepted else CHALLENGE_HTML)
+    assert url == LANDING
+    assert len(calls) == (4 if accepted else 3)
+    assert all(call[0] is calls[0][0] for call in calls)
+
+
+@pytest.mark.parametrize(
+    "html", [HTML, CHALLENGE_HTML.replace("/captcha/solution/123", "https://other.example/solve")]
+)
+def test_unrecognized_flow_does_not_submit(monkeypatch, html):
+    calls = []
+
+    def request(*args):
+        calls.append(args)
+        return html, LANDING
+
+    monkeypatch.setattr(sci_hub, "_request", request)
+    assert sci_hub._fetch(LANDING) == (html, LANDING)
+    assert len(calls) == 1

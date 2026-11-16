@@ -153,7 +153,8 @@ cached lookup and usable PDF conversion under the same mirror configuration.
 The default entry point is `https://sci-hub.ru`. Set `PAPERSTACK_SCI_HUB_URL` or pass
 `--sci-hub-url https://MIRROR` to choose another HTTPS origin. Missing papers (`unavailable`), browser
 verification or rate limiting (`blocked`), and network/parser errors (`error`) are distinct; failures
-are not cached. Browser challenges are reported with the landing URL and are not solved by the CLI.
+are not cached. The known ALTCHA SHA-256 verification flow is handled in the same HTTP session,
+with bounded work and one retry. Other browser challenges are reported with the landing URL.
 A successful lookup is not a guarantee that downloading the PDF will succeed.
 
 ### Source reading
