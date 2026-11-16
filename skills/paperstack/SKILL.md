@@ -47,6 +47,10 @@ paperstack review list --quality good --tag vla
 paperstack paper metadata arxiv:2106.09685
 paperstack paper search "Exact Paper Title" --source openreview --exact-title
 paperstack paper search "flow matching robotics" --source semantic-scholar --year 2024-2026
+paperstack paper search 'asthma[MeSH Terms] AND clinical trial[pt]' --source pubmed
+paperstack paper search 'asthma AND OPEN_ACCESS:Y' --source europe-pmc
+paperstack paper metadata pmid:36682372 --source pubmed
+paperstack paper read pmcid:PMC13736361 --outline
 paperstack paper search 'ti:"flow matching"' --source arxiv --category cs.RO --sort date
 paperstack paper citations arxiv:2106.09685 --limit 50
 paperstack paper references arxiv:2106.09685 --limit 50
@@ -55,7 +59,9 @@ paperstack paper read arxiv:2106.09685 --section 3
 ```
 
 Pin `arxiv:IDvN`; use `--documents` and `--document FILE` to inspect separate supplements.
-Non-arXiv reads need a verified `--pdf-url`. Inspect PDF quality metadata before opting into
+PMID/PMCID/DOI reads resolve available PMC full text and support outlines, sections, and offline caches.
+PubMed metadata includes abstracts and linked correction/retraction notices; an abstract is not full text.
+Other non-arXiv reads need a verified `--pdf-url`. Inspect PDF quality metadata before opting into
 `--allow-partial`; check original tables when extraction is ambiguous.
 
 Use `paperstack paper pdf` only when the source workflow needs a PDF. Install the PDF extra with `uv tool install 'paperstack-cli[pdf]'` only after the user agrees.

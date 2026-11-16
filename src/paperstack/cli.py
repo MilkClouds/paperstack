@@ -1006,6 +1006,13 @@ def _run_paper(a: argparse.Namespace) -> int:
                     limit=a.limit,
                     sort=a.sort,
                 )
+            elif a.source == "pubmed":
+                from . import pubmed
+
+                unsupported = [flag for flag in semantic_filters + arxiv_filters if flag not in ("--offset", "--sort")]
+                if unsupported:
+                    die("PubMed does not support " + ", ".join(unsupported) + "; use PubMed query field tags")
+                result = pubmed.search(a.query, limit=a.limit, offset=a.offset, sort=a.sort)
             elif a.source == "semantic-scholar":
                 from . import semantic_scholar
 
@@ -1050,6 +1057,18 @@ def _run_paper(a: argparse.Namespace) -> int:
         die(str(exc))
     if ref.kind == "arxiv" and not re.search(r"v[1-9]\d*$", ref.value):
         warn("Unversioned arXiv reference: cached content may not be current; pin vN for reproducible reads.")
+    if a.paper_cmd == "read" and not a.pdf_url and ref.kind in ("pmid", "pmcid", "doi"):
+        from .content import pmc
+        from .content.arxiv_source import _print_chunk
+
+        if a.documents or a.document or a.allow_partial:
+            die("PMC XML reads do not support --documents, --document, or --allow-partial")
+        try:
+            document = pmc.load(ref, _paper_cache(), offline=offline, refresh=a.refresh)
+            _print_chunk(pmc.render(document, outline=a.outline, section=a.section_id), a.start, a.max_chars)
+        except (OSError, ValueError) as exc:
+            die(str(exc))
+        return 0
     if a.pdf_url or a.paper_cmd == "pdf" or ref.kind != "arxiv":
         return _read_pdf(a, ref, offline)
     from .content import arxiv_source
@@ -1199,7 +1218,7 @@ Use `paperstack paper ...` when you need external metadata or the paper body."""
     paper = sub.add_parser(
         "paper",
         help="source-backed paper facts and contents",
-        description="Inspect external source records and read arXiv paper contents without choosing a citation.",
+        description="Inspect external source records and read arXiv or PMC paper contents without choosing a citation.",
         epilog="""examples:
   paperstack paper search "Attention Is All You Need" --source dblp
   paperstack paper metadata arxiv:2403.19622
@@ -1211,10 +1230,20 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     )
     paper_sub = paper.add_subparsers(dest="paper_cmd", required=True)
     s = paper_sub.add_parser("metadata", help="fetch source records without choosing between them")
-    s.add_argument("paper_ref", help="arxiv:, doi:, dblp:, or openreview: reference")
+    s.add_argument("paper_ref", help="arxiv:, doi:, dblp:, openreview:, pmid:, or pmcid: reference")
     s.add_argument(
         "--source",
-        choices=("all", "semantic-scholar", "dblp", "crossref", "openreview", "acl-anthology", "arxiv"),
+        choices=(
+            "all",
+            "semantic-scholar",
+            "dblp",
+            "crossref",
+            "openreview",
+            "acl-anthology",
+            "arxiv",
+            "pubmed",
+            "europe-pmc",
+        ),
         default="all",
     )
     _output(s)
@@ -1223,11 +1252,11 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s.add_argument("query", help="paper title or other source-specific search text")
     s.add_argument(
         "--source",
-        choices=("semantic-scholar", "dblp", "crossref", "openreview", "arxiv"),
+        choices=("semantic-scholar", "dblp", "crossref", "openreview", "arxiv", "pubmed", "europe-pmc"),
         default="semantic-scholar",
     )
     s.add_argument("--limit", type=int, default=10, help="maximum results")
-    s.add_argument("--offset", type=int, default=0, help="Semantic Scholar result offset")
+    s.add_argument("--offset", type=int, default=0, help="Semantic Scholar or PubMed result offset")
     s.add_argument("--year", help="Semantic Scholar year or year range")
     s.add_argument("--field-of-study", action="append", dest="fields_of_study")
     s.add_argument("--open-access", action="store_true", help="require an open-access PDF")
@@ -1250,12 +1279,14 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
         s.add_argument("--offset", type=int, default=0)
         _output(s)
         _offline(s)
-    s = paper_sub.add_parser("read", help="read the LaTeX body, outline, or one section")
-    s.add_argument("paper_ref", help="arxiv: (version preserved), doi:, dblp:, or openreview: reference")
+    s = paper_sub.add_parser("read", help="read arXiv LaTeX or PMC full text, outline, or one section")
+    s.add_argument(
+        "paper_ref", help="arxiv: (version preserved), doi:, dblp:, openreview:, pmid:, or pmcid: reference"
+    )
     mode = s.add_mutually_exclusive_group()
     mode.add_argument("--outline", action="store_true", help="print numbered section headings only")
     mode.add_argument("--section", dest="section_id", help="print one section by outline number")
-    s.add_argument("--refresh", action="store_true", help="replace the cached arXiv source")
+    s.add_argument("--refresh", action="store_true", help="replace the cached paper source")
     s.add_argument("--start", type=int, default=0, help="start at this character offset")
     s.add_argument("--max-chars", type=int, default=0, help="truncate output after this many characters")
     s.add_argument("--documents", action="store_true", help="list source files, including supplements")
@@ -1264,7 +1295,9 @@ Use `paperstack review ...` to find or read an authored critical judgment.""",
     s.add_argument("--allow-partial", action="store_true", help="explicitly accept incomplete PDF extraction")
     _offline(s)
     s = paper_sub.add_parser("pdf", help="download and convert a native PDF submission")
-    s.add_argument("paper_ref", help="arxiv: (version preserved), doi:, dblp:, or openreview: reference")
+    s.add_argument(
+        "paper_ref", help="arxiv: (version preserved), doi:, dblp:, openreview:, pmid:, or pmcid: reference"
+    )
     s.add_argument("--pdf-url", help="explicit primary-source HTTPS PDF URL")
     s.add_argument("--allow-partial", action="store_true", help="explicitly accept incomplete PDF extraction")
     s.add_argument("--refresh", action="store_true", help="download and convert the PDF again")

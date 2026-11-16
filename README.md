@@ -6,7 +6,7 @@ Paperstack is an open-source CLI for maintaining, querying, and publishing an in
 The software and corpus are separate: Paperstack can be public while each corpus and its editorial judgments remain
 under its maintainer's control.
 
-It can search typed reviews, initialize and validate entries, inspect external paper metadata, read arXiv sources,
+It can search typed reviews, initialize and validate entries, inspect external paper metadata, read arXiv and PMC sources,
 manage a selected-venue DBLP index, and build a static viewer. A synthetic corpus lives in
 [`examples/corpus`](https://github.com/MilkClouds/paperstack/tree/main/examples/corpus); no assessment of real work is
 bundled with the package.
@@ -124,11 +124,44 @@ paperstack paper read arxiv:2604.23073 --section 6
 paperstack paper pdf arxiv:2602.09017
 ```
 
-`metadata` accepts `arxiv:`, `doi:`, `dblp:`, and `openreview:` references. `read` and `pdf`
-accept arXiv references directly; other identifiers require an explicit primary-source HTTPS `--pdf-url`. `authors`, `citations`, and `references` use Semantic Scholar and also accept its `s2:`, `corpus:`, `acl:`,
+`metadata` accepts `arxiv:`, `doi:`, `dblp:`, `openreview:`, `pmid:`, and `pmcid:` references.
+`read` accepts arXiv references directly and resolves PMID/PMCID/DOI references to PMC full text when available.
+Other reads and non-arXiv `pdf` conversions require an explicit primary-source HTTPS `--pdf-url`. `authors`, `citations`, and `references` use Semantic Scholar and also accept its `s2:`, `corpus:`, `acl:`,
 `pmid:`, and `mag:` identifiers. Structured commands expose scoped `--json` flags; networked commands expose scoped
 `--offline` flags. Paperstack reports source records but does not synthesize a citation entry or choose which version
 of a work should be cited.
+
+### Biomedical literature
+
+```bash
+paperstack paper search 'asthma[MeSH Terms] AND clinical trial[pt]' --source pubmed --limit 10
+paperstack paper search 'asthma[Title]' --source pubmed --sort date --offset 10
+paperstack paper search 'asthma AND OPEN_ACCESS:Y' --source europe-pmc
+paperstack paper metadata pmid:36682372 --source pubmed --json
+paperstack paper metadata doi:10.1007/s11882-026-01304-2 --source europe-pmc --json
+paperstack paper read pmcid:PMC13736361 --outline
+paperstack paper read pmcid:PMC13736361 --section 1 --offline
+```
+
+PubMed uses NCBI ESearch/EFetch and preserves native query syntax (MeSH, publication types, dates,
+authors, and journals). Results include structured abstracts, DOI/PMCID links, MeSH descriptors,
+and linked correction/retraction notices. `--offset` and `--sort` are supported; use query field tags
+for other filters. PubMed search is limited to its first 9,999 results; narrow the query to go further.
+Europe PMC uses its own query syntax and returns core records, including open-access indicators.
+Both sources work without API keys. NCBI requests are paced at two per second with a shared local lock.
+
+`read pmid:...`, `read pmcid:...`, and `read doi:...` resolve PMC identifiers and fetch JATS XML,
+trying NCBI first and Europe PMC second. Reads include sections, table text, figure captions,
+back matter, source URL, and license text when supplied. They support `--outline`, `--section`,
+`--start`, `--max-chars`, `--refresh`, and checksum-verified `--offline` reads of the same reference.
+No PDF extra is needed. Images, attached supplements, and original table/formula layout require
+inspection of the original article. Metadata availability does not imply full-text availability:
+missing or restricted full text fails explicitly instead of returning an abstract as the article.
+PMC-backed reads do not bypass publisher paywalls or automatically download publisher PDFs.
+
+The integration follows the public API approach illustrated by
+[pubmed-mcp-server](https://github.com/cyanheads/pubmed-mcp-server) and
+[paper-search-mcp](https://github.com/openags/paper-search-mcp); neither MCP server is required.
 
 ### Source reading
 
@@ -136,7 +169,7 @@ of a work should be cited.
   Unversioned reads may use stale cached content; `--refresh` refetches, `--offline` never does.
 - `read ... --documents` lists source files. Multiple TeX roots require `--document FILE`;
   inspect relevant supplements separately. `--outline`/`--section` apply to that document.
-- DOI/OpenReview/DBLP reads require `--pdf-url https://...` pointing to the primary PDF.
+- OpenReview/DBLP reads and DOI reads without PMC full text require `--pdf-url https://...` pointing to the primary PDF.
   `read` prints Markdown; `pdf` prints its cache path. New conversions need the PDF extra.
 - Partial PDF extraction returns failure unless `--allow-partial` is explicit, even offline.
   Check `meta.json` and the PDF before using numbers. Converter quality does not certify accuracy.
@@ -177,7 +210,7 @@ pointer switch. See
 | `PAPERSTACK_DIR` | Explicit local corpus working tree |
 | `PAPERSTACK_REPO` | Explicit GitHub corpus in `OWNER/REPO` form |
 | `PAPERSTACK_TTL` | Remote corpus cache refresh interval; default `3600` seconds |
-| `PAPERSTACK_PAPERS_DIR` | arXiv source and PDF cache |
+| `PAPERSTACK_PAPERS_DIR` | arXiv, PMC XML, and PDF cache |
 | `SEMANTIC_SCHOLAR_API_KEY` | Optional higher-rate Semantic Scholar access |
 | `OPENREVIEW_ACCESS_TOKEN` | Optional OpenReview access cookie value |
 | `XDG_CONFIG_HOME` | Corpus profile and credential configuration root |

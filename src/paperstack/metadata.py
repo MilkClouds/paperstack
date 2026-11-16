@@ -23,8 +23,8 @@ from . import credentials
 from .tls import arxiv_context
 
 ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
-SOURCES = ("semantic_scholar", "dblp", "crossref", "openreview", "acl_anthology", "arxiv")
-SEARCH_SOURCES = ("s2", "dblp", "crossref", "openreview", "arxiv")
+SOURCES = ("semantic_scholar", "dblp", "crossref", "openreview", "acl_anthology", "arxiv", "pubmed", "europe_pmc")
+SEARCH_SOURCES = ("s2", "dblp", "crossref", "openreview", "arxiv", "pubmed", "europe-pmc")
 S2_FIELDS = (
     "paperId,externalIds,title,abstract,venue,year,authors,citationCount,influentialCitationCount,referenceCount,"
     "publicationDate,publicationTypes,fieldsOfStudy,s2FieldsOfStudy,journal,openAccessPdf"
@@ -39,10 +39,19 @@ class PaperRef:
     @classmethod
     def parse(cls, raw: str, *, preserve_version: bool = False) -> PaperRef:
         if ":" not in raw:
-            raise ValueError("paper reference needs a prefix: arxiv:, doi:, dblp:, or openreview:")
+            raise ValueError("paper reference needs a prefix: arxiv:, doi:, dblp:, openreview:, pmid:, or pmcid:")
         kind, value = raw.strip().split(":", 1)
-        if kind not in ("arxiv", "doi", "dblp", "openreview") or not value:
-            raise ValueError("paper reference needs a prefix: arxiv:, doi:, dblp:, or openreview:")
+        if kind not in ("arxiv", "doi", "dblp", "openreview", "pmid", "pmcid") or not value:
+            raise ValueError("paper reference needs a prefix: arxiv:, doi:, dblp:, openreview:, pmid:, or pmcid:")
+        if kind in ("pmid", "pmcid"):
+            value = value.strip().upper()
+            if kind == "pmcid":
+                value = value.removeprefix("PMC")
+            if not re.fullmatch(r"[0-9]+", value) or int(value) == 0:
+                raise ValueError(f"invalid {kind.upper()} reference")
+            value = str(int(value))
+            if kind == "pmcid":
+                value = "PMC" + value
         if kind == "arxiv":
             versioned = value
             value = re.sub(r"v[1-9]\d*$", "", value)
@@ -61,20 +70,20 @@ _OPENREVIEW_HOSTS = {"api.openreview.net", "api2.openreview.net"}
 
 @contextmanager
 def _request_slot(key: str):
-    if key != "openreview":
+    if key not in ("openreview", "eutils.ncbi.nlm.nih.gov"):
         yield None
         return
     base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     root = base / "paperstack" / "http"
     try:
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        lock = FileLock(root / "openreview.lock", timeout=120)
+        lock = FileLock(root / f"{key}.lock", timeout=120)
         lock.acquire()
     except OSError:
         yield None
         return
     try:
-        yield root / "openreview.timestamp"
+        yield root / f"{key}.timestamp"
     finally:
         lock.release()
 
@@ -220,8 +229,12 @@ def fetch_arxiv(arxiv_id: str) -> dict:
 
 
 def resolve_s2(ref: PaperRef) -> dict:
-    prefix = {"arxiv": "ARXIV", "doi": "DOI", "dblp": "DBLP", "openreview": "URL"}[ref.kind]
+    prefix = {"arxiv": "ARXIV", "doi": "DOI", "dblp": "DBLP", "openreview": "URL", "pmid": "PMID", "pmcid": "URL"}[
+        ref.kind
+    ]
     value = f"https://openreview.net/forum?id={ref.value}" if ref.kind == "openreview" else ref.value
+    if ref.kind == "pmcid":
+        value = f"https://pmc.ncbi.nlm.nih.gov/articles/{ref.value}/"
     ident = urllib.parse.quote(f"{prefix}:{value}", safe="")
     url = f"https://api.semanticscholar.org/graph/v1/paper/{ident}"
     api_key = credentials.get(credentials.SEMANTIC_SCHOLAR_API_KEY)
@@ -325,6 +338,20 @@ def fetch_all(
     ref = raw_ref if isinstance(raw_ref, PaperRef) else PaperRef.parse(raw_ref)
     enabled = enabled or set(SOURCES)
     results: list[dict] = []
+    biomedical = enabled & {"pubmed", "europe_pmc"}
+    if biomedical:
+        from . import pubmed
+
+        for source in ("pubmed", "europe_pmc"):
+            if source not in biomedical:
+                continue
+            if ref.kind in ("pmid", "pmcid", "doi"):
+                results.append(pubmed.fetch(ref) if source == "pubmed" else pubmed.europe_fetch(ref))
+            else:
+                results.append({"source": source, "status": "unavailable", "reason": "requires PMID, PMCID, or DOI"})
+        enabled = enabled - biomedical
+        if not enabled:
+            return results
     ids = {"doi": None, "arxiv": None, "dblp": None, "openreview": None, "acl": None, "title": None}
     ids[ref.kind] = ref.value
     if ref.kind == "doi" and (match := re.match(r"^10\.18653/v1/(.+)$", ref.value)):
@@ -422,6 +449,12 @@ def search(
         raise ValueError("exact title and OpenReview status filters require the openreview source")
     if openreview_status not in (None, "submission", "accepted", "withdrawn"):
         raise ValueError("OpenReview status must be submission, accepted, or withdrawn")
+    if source in ("pubmed", "europe-pmc"):
+        if local_only:
+            raise ValueError("biomedical search requires network access")
+        from . import pubmed
+
+        return pubmed.search(query, limit=limit) if source == "pubmed" else pubmed.europe_search(query, limit=limit)
     if source == "dblp":
         from . import dblp_index
 
